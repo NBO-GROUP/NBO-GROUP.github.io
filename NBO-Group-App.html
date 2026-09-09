@@ -221,15 +221,39 @@ function fillLogin(email, pass){
 }
 
 function doLogin(){
-  const emailVal = document.getElementById("li-email")?.value.trim().toLowerCase();
-  const passVal  = document.getElementById("li-pass")?.value;
-  const err      = document.getElementById("li-err");
-  const found    = employees.find(e=>e.email.toLowerCase()===emailVal && e.password===passVal);
-  if(!found){
-    err.style.display="block";
-    document.getElementById("li-pass").value="";
+  const rawVal  = (document.getElementById("li-email")?.value||"").trim();
+  const passVal = (document.getElementById("li-pass")?.value||"");
+  const errEl   = document.getElementById("li-err");
+  const emailVal = rawVal.toLowerCase();
+
+  if(!rawVal || !passVal){
+    if(errEl){ errEl.textContent="✗ Veuillez saisir votre email et mot de passe."; errEl.style.display="block"; }
     return;
   }
+
+  const found = employees.find(e => {
+    const emailMatch = e.email && e.email.toLowerCase() === emailVal;
+    const nameMatch  = e.name  && e.name.toLowerCase()  === emailVal;
+    return (emailMatch || nameMatch) && e.password === passVal;
+  });
+
+  if(!found){
+    const exists = employees.find(e =>
+      (e.email && e.email.toLowerCase()===emailVal) ||
+      (e.name  && e.name.toLowerCase()===emailVal)
+    );
+    if(errEl){
+      errEl.textContent = exists
+        ? "✗ Mot de passe incorrect."
+        : "✗ Aucun compte trouvé avec cet email.";
+      errEl.style.display="block";
+    }
+    const pi = document.getElementById("li-pass");
+    if(pi) pi.value="";
+    return;
+  }
+
+  if(errEl) errEl.style.display="none";
   sessionUser = found;
   employees = employees.map(e=>e.id===found.id?{...e,online:true}:e);
   scheduleSave();
@@ -1454,63 +1478,23 @@ renderNav();
 renderMain();
 renderLoginDemoAccounts();
 
-(async function init(){
-  if(ghToken){
-    // Token existant → charger les données puis afficher login
-    showSyncStatus("saving");
-    const ok = await ghLoad();
-    if(ok){
-      showSyncStatus("saved");
-      renderLoginDemoAccounts(); // refresh avec données GitHub
-    } else {
-      showSyncStatus("error");
-    }
-    document.getElementById("login-screen").style.display = "flex";
-  } else {
-    // Pas de token → écran de config
-    renderConfigScreen();
-    document.getElementById("login-screen").style.display = "none";
-    document.getElementById("config-screen").style.display = "flex";
-  }
-})();
-
-
-// ── INIT ──────────────────────────────────────────────────────────────────────
-function showScreen(id){
-  ['config-screen','login-screen','app'].forEach(s=>{
-    const el=document.getElementById(s);
-    if(el) el.style.display = s===id ? (s==='app'?'flex':'flex') : 'none';
-  });
-}
-
-
 // login-screen visible by default, hide others
 document.getElementById('app').style.display='none';
 document.getElementById('config-screen').style.display='none';
+document.getElementById('login-screen').style.display='flex';
 
 renderNav();
 renderMain();
-
-// Startup: show config if no token, else show login
 renderLoginDemoAccounts();
 
-(async function init(){
-  try {
-    if(ghToken){
-      // Token exists: load data then stay on login
-      await ghLoad();
-      renderLoginDemoAccounts();
-      showSyncStatus("saved");
-    } else {
-      // No token: show config screen
-      renderConfigScreen();
-      document.getElementById('login-screen').style.display='none';
-      document.getElementById('config-screen').style.display='flex';
-    }
-  } catch(err){
-    console.error('Init error:', err);
-    document.getElementById('login-screen').style.display='flex';
-    renderLoginDemoAccounts();
+(async function(){
+  if(ghToken){
+    ghLoad().then(ok=>{
+      if(ok){ showSyncStatus("saved"); renderLoginDemoAccounts(); }
+      else { showSyncStatus("error"); }
+    });
+  } else {
+    showSyncStatus("offline");
   }
 })();
 
@@ -1557,15 +1541,6 @@ window.skipConfig       = skipConfig;
 window.resetGhConfig    = resetGhConfig;
 window.installPWA       = installPWA;
 
-// ── iOS install hint ──────────────────────────────────────────────────────────
-const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-const isInStandalone = window.navigator.standalone === true;
-if(isIos && !isInStandalone){
-  setTimeout(()=>{
-    const b = document.getElementById('ios-banner');
-    if(b) b.style.display='flex';
-  }, 2000);
-}
 </script>
 </body>
 </html>
