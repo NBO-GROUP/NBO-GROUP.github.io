@@ -134,9 +134,14 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.6}
       </div>
     </div>
     <nav id="nav" style="padding:14px 10px;flex:1"></nav>
-    <div id="sync-status" style="padding:6px 16px;border-top:1px solid #2d6633;font-size:11px;display:flex;align-items:center;justify-content:space-between">
-      <span style="color:#4a6a4e">○ Non connecté</span>
-      <button onclick="resetGhConfig()" title="Reconfigurer GitHub" style="background:none;border:none;color:#4a6a4e;font-size:11px;cursor:pointer" onmouseover="this.style.color='#e2bc50'" onmouseout="this.style.color='#4a6a4e'">⚙ GitHub</button>
+    <div style="padding:8px 12px;border-top:1px solid #2d6633">
+      <div id="sync-status" style="font-size:11px;color:#4a6a4e;margin-bottom:6px">○ Non connecté</div>
+      <button onclick="openGhConfig()" id="btn-gh-config" style="display:none;width:100%;background:linear-gradient(135deg,#b8962a,#e2bc50);border:none;border-radius:8px;padding:7px 10px;color:#1a1000;font-weight:700;font-size:12px;cursor:pointer;text-align:left">
+        🔗 Connecter GitHub (sync)
+      </button>
+      <button onclick="openGhConfig()" id="btn-gh-reconfig" style="display:none;width:100%;background:#0e3516;border:1px solid #2d6633;border-radius:8px;padding:7px 10px;color:#7abf82;font-weight:600;font-size:12px;cursor:pointer;text-align:left">
+        ⚙ Reconfigurer GitHub
+      </button>
     </div>
     <div id="me-bar" style="padding:14px 16px;border-top:1px solid #2d6633;display:flex;align-items:center;gap:10px"></div>
   </div>
@@ -257,11 +262,13 @@ function doLogin(){
   if(errEl) errEl.style.display="none";
   sessionUser = found;
   employees = employees.map(e=>e.id===found.id?{...e,online:true}:e);
-  scheduleSave();
   document.getElementById("login-screen").style.display="none";
   document.getElementById("app").style.display="flex";
   renderNav();
   renderMain();
+  // Afficher le statut sync et le bouton GitHub si besoin
+  showSyncStatus(ghToken ? "saved" : "offline");
+  scheduleSave();
 }
 
 function doLogout(){
@@ -1340,13 +1347,17 @@ const GH_FILE   = "nbo-app-data.json";
 const GH_BRANCH = "main";
 const GH_API    = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`;
 
-let ghToken   = localStorage.getItem("nbo_gh_token") || "";
+// Token intégré par l'admin (partagé avec tous les utilisateurs)
+const NBO_TOKEN_EMBEDDED = ""; // REMPLACÉ AUTOMATIQUEMENT PAR L'ADMIN
+let ghToken   = NBO_TOKEN_EMBEDDED || localStorage.getItem("nbo_gh_token") || "";
 let ghFileSha = localStorage.getItem("nbo_gh_sha")   || "";
 let syncTimer = null;
 
 // ── Statut de synchronisation ──────────────────────────────────────────────────
 function showSyncStatus(state){
-  const el = document.getElementById("sync-status");
+  const el    = document.getElementById("sync-status");
+  const btnCo = document.getElementById("btn-gh-config");
+  const btnRe = document.getElementById("btn-gh-reconfig");
   if(!el) return;
   const s = {
     pending: {icon:"⏳", text:"En attente…",  color:"#e2bc50"},
@@ -1355,7 +1366,22 @@ function showSyncStatus(state){
     error:   {icon:"✗",  text:"Erreur sync", color:"#ff8080"},
     offline: {icon:"○",  text:"Hors-ligne",  color:"#9a9070"},
   }[state] || {icon:"○", text:"", color:"#9a9070"};
-  el.innerHTML = `<span style="color:${s.color};font-size:11px;display:flex;align-items:center;gap:4px">${s.icon} ${s.text}</span>`;
+  el.style.color = s.color;
+  el.textContent = s.icon + " " + s.text;
+
+  // Afficher le bon bouton GitHub selon l'état et le rôle
+  if(!sessionUser || !sessionUser.admin) {
+    if(btnCo) btnCo.style.display="none";
+    if(btnRe) btnRe.style.display="none";
+    return;
+  }
+  if(state==="offline"){
+    if(btnCo) btnCo.style.display="block";
+    if(btnRe) btnRe.style.display="none";
+  } else {
+    if(btnCo) btnCo.style.display="none";
+    if(btnRe) btnRe.style.display="block";
+  }
 }
 
 // ── Sauvegarde vers GitHub ─────────────────────────────────────────────────────
@@ -1464,6 +1490,45 @@ function toggleCfgToken(){
   b.textContent = i.type==="password"?"Voir":"Masquer";
 }
 
+async function openGhConfig(){
+  if(!sessionUser?.admin) return;
+  const m = document.getElementById("modal-emp");
+  m.style.display = "flex";
+  m.innerHTML = `<div class="modal" style="width:480px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div>
+        <div style="font-size:16px;font-weight:800;color:#fff">🔗 Connexion GitHub</div>
+        <div style="font-size:12px;color:#7abf82">Synchronisation des données NBO Connect</div>
+      </div>
+      <button onclick="document.getElementById('modal-emp').style.display='none'" style="background:none;border:none;color:#7abf82;font-size:24px;cursor:pointer">×</button>
+    </div>
+    <div style="background:#051f0a;border:1px solid #2d6633;border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;color:#7abf82;line-height:1.8">
+      <div style="color:#e2bc50;font-weight:700;margin-bottom:6px">📋 Statut actuel : <span style="color:${ghToken?"#6dda50":"#ff8080"}">${ghToken?"✓ Connecté":"✗ Non configuré"}</span></div>
+      <div>• Repo : <strong style="color:#fff">nbo-data</strong> (privé)</div>
+      <div>• Propriétaire : <strong style="color:#fff">NBO-GROUP</strong></div>
+    </div>
+    <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Token GitHub Personnel</label>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input id="cfg-token" type="password" class="inp" placeholder="${ghToken?"Token actuel masqué — saisir pour changer":"ghp_xxxxxxxxxxxxxxxxxxxx"}" style="flex:1;font-family:monospace">
+      <button onclick="toggleCfgToken()" style="background:#0e3516;border:1px solid #2d6633;border-radius:8px;padding:0 12px;color:#7abf82;font-size:12px;cursor:pointer">Voir</button>
+    </div>
+    <div id="cfg-err" style="display:none;background:#2e0e0e;border:1px solid #7a2000;border-radius:8px;padding:9px 14px;color:#ff8080;font-size:13px;margin-bottom:12px"></div>
+    <div id="cfg-ok"  style="display:none;background:#0e2e10;border:1px solid #6dda5044;border-radius:8px;padding:9px 14px;color:#6dda50;font-size:13px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn" id="cfg-btn" onclick="saveGhConfig()" style="flex:1;padding:12px">🔗 Connecter & Synchroniser</button>
+      ${ghToken?`<button onclick="clearGhTokenFn()" style="background:#2e0e0e;border:1px solid #7a2000;border-radius:8px;padding:12px 16px;color:#ff8080;font-size:13px;cursor:pointer">Déconnecter</button>`:""}
+    </div>
+  </div>`;
+}
+
+function clearGhTokenFn(){
+  ghToken=""; ghFileSha="";
+  localStorage.removeItem("nbo_gh_token");
+  localStorage.removeItem("nbo_gh_sha");
+  document.getElementById("modal-emp").style.display="none";
+  showSyncStatus("offline");
+}
+
 async function saveGhConfig(){
   const token = document.getElementById("cfg-token")?.value.trim();
   const errEl = document.getElementById("cfg-err");
@@ -1484,19 +1549,76 @@ async function saveGhConfig(){
     ghFileSha = "";
     localStorage.setItem("nbo_gh_token", token);
     localStorage.removeItem("nbo_gh_sha");
-    okEl.textContent="✓ Connexion réussie ! Chargement des données…";
+    okEl.textContent="✓ Connexion réussie ! Intégration en cours…";
     okEl.style.display="block";
     await ghLoad();
-    renderLoginDemoAccounts();
+    showSyncStatus("saved");
+    // Intégrer le token dans le fichier HTML publié pour tous les utilisateurs
+    await embedTokenInHTML(token);
+    renderNav();
+    renderMain();
     setTimeout(()=>{
-      document.getElementById("config-screen").style.display="none";
-      document.getElementById("login-screen").style.display="flex";
-    }, 1000);
+      document.getElementById("modal-emp").style.display="none";
+    }, 2000);
   } catch(e){
     errEl.textContent="✗ "+e.message;
     errEl.style.display="block";
     btn.textContent="Connecter & Synchroniser →";
     btn.disabled=false;
+  }
+}
+
+// Intègre le token dans le fichier HTML publié sur GitHub Pages
+// Ainsi tous les utilisateurs bénéficient de la synchronisation automatique
+async function embedTokenInHTML(token){
+  try {
+    const SITE_REPO = "NBO-GROUP.github.io";
+    const SITE_FILE = "NBO-Group-App.html";
+    const SITE_API  = "https://api.github.com/repos/" + GH_OWNER + "/" + SITE_REPO + "/contents/" + SITE_FILE;
+    
+    // Récupérer le fichier HTML actuel
+    const getR = await fetch(SITE_API + "?ref=main&t=" + Date.now(), {
+      headers:{ Authorization:"token "+token, Accept:"application/vnd.github.v3+json" }
+    });
+    if(!getR.ok) return; // Si on ne peut pas modifier, pas grave
+    
+    const getJson = await getR.json();
+    const currentSha = getJson.sha;
+    let currentHTML = decodeURIComponent(escape(atob(getJson.content.replace(/\n/g,""))));
+    
+    // Remplacer le token embarqué dans le HTML
+    const OLD_TOKEN_LINE = 'const NBO_TOKEN_EMBEDDED = "";';
+    const NEW_TOKEN_LINE = 'const NBO_TOKEN_EMBEDDED = "' + token + '";';
+    
+    if(!currentHTML.includes(OLD_TOKEN_LINE) && !currentHTML.includes('const NBO_TOKEN_EMBEDDED')) return;
+    
+    // Remplacer quelle que soit la valeur actuelle
+    currentHTML = currentHTML.replace(
+      /const NBO_TOKEN_EMBEDDED = "[^"]*";/,
+      NEW_TOKEN_LINE
+    );
+    
+    // Pousser le HTML modifié sur GitHub
+    const newContent = btoa(unescape(encodeURIComponent(currentHTML)));
+    const putR = await fetch(SITE_API, {
+      method:"PUT",
+      headers:{ Authorization:"token "+token, "Content-Type":"application/json", Accept:"application/vnd.github.v3+json" },
+      body: JSON.stringify({
+        message: "NBO Connect — Token synchronisation intégré",
+        content: newContent,
+        sha: currentSha,
+        branch: "main"
+      })
+    });
+    
+    if(putR.ok){
+      console.log("✓ Token intégré dans le HTML — tous les utilisateurs peuvent maintenant synchroniser");
+      const okEl = document.getElementById("cfg-ok");
+      if(okEl) okEl.textContent = "✓ Synchronisation activée pour toute l'équipe ! Rechargement dans 5s…";
+      setTimeout(()=>{ window.location.reload(); }, 5000);
+    }
+  } catch(e){
+    console.log("embedTokenInHTML error (non-bloquant):", e);
   }
 }
 
@@ -3091,6 +3213,8 @@ window.saveGhConfig     = saveGhConfig;
 window.toggleCfgToken   = toggleCfgToken;
 window.skipConfig       = skipConfig;
 window.resetGhConfig    = resetGhConfig;
+window.openGhConfig      = openGhConfig;
+window.clearGhTokenFn   = clearGhTokenFn;
 window.setPlanView       = setPlanView;
 window.setPlanFiltre     = setPlanFiltre;
 window.openPlanForm      = openPlanForm;
