@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8"/>
+<meta name="version" content="2.1-stock"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <meta name="theme-color" content="#072b0e"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -13,7 +14,7 @@
 <link rel="manifest" href="https://nbo-group.github.io/manifest.json"/>
 <link rel="icon" type="image/png" sizes="192x192" href="https://nbo-group.github.io/icon-192.png"/>
 <link rel="apple-touch-icon" sizes="192x192" href="https://nbo-group.github.io/icon-192.png"/>
-<title>NBO Connect</title>
+<title>NBO Connect v2.1</title>
 <script>
 // Enregistrement du Service Worker PWA
 if('serviceWorker' in navigator){
@@ -301,6 +302,62 @@ const DOC_STATUS_STYLE = {
   "archivé":  {bg:"#0e2e10",tc:"#6dda50",border:"#6dda5044"},
   "rejeté":   {bg:"#2e0e0e",tc:"#ff8080",border:"#ff808044"},
 };
+
+// ── Données produits (basées sur le bon de commande TPCI) ────────────────────
+let produits = [
+  {id:"p01", ref:"HRZ-CR50",  nom:"HERZA CREME 50G B/1",              conditionnement:70,  prixUnitaire:6500,  categorie:"HERZA"},
+  {id:"p02", ref:"HRZ-LT200", nom:"HERZA LOTION 200ML B/1",           conditionnement:48,  prixUnitaire:3800,  categorie:"HERZA"},
+  {id:"p03", ref:"HRZ-SH500", nom:"HERZA SHAMPOING 500ML B/1",        conditionnement:24,  prixUnitaire:5300,  categorie:"HERZA"},
+  {id:"p04", ref:"HRZ-AS500", nom:"HERZA APRES-SHAMPOING 500ML B/1",  conditionnement:24,  prixUnitaire:7500,  categorie:"HERZA"},
+  {id:"p05", ref:"HRZ-GD500", nom:"HERZA GEL DOUCHE 500ML B/1",       conditionnement:24,  prixUnitaire:3200,  categorie:"HERZA"},
+  {id:"p06", ref:"HRZ-MO120", nom:"HERZA MOUSSE 120ML B/1",           conditionnement:72,  prixUnitaire:4200,  categorie:"HERZA"},
+  {id:"p07", ref:"BM-LT100",  nom:"B&M HUG LOTION 100G B/1",          conditionnement:72,  prixUnitaire:3000,  categorie:"B&M HUG"},
+  {id:"p08", ref:"BM-CR50",   nom:"B&M HUG CREME 50G B/1",            conditionnement:72,  prixUnitaire:5500,  categorie:"B&M HUG"},
+  {id:"p09", ref:"BM-SH200",  nom:"B&M HUG SHAMPOING 200ML B/1",      conditionnement:48,  prixUnitaire:3300,  categorie:"B&M HUG"},
+];
+
+// ── Structures partenaires (bénéficiaires des sorties) ────────────────────────
+let partenaires = [
+  {id:"str01", nom:"CEDRE VISION",       ville:"Abidjan", contact:"+225 07 59 16 47 97", type:"Distributeur"},
+  {id:"str02", nom:"Pharmacie du Plateau", ville:"Abidjan", contact:"",                   type:"Pharmacie"},
+  {id:"str03", nom:"Clinique Sainte Marie", ville:"Abidjan", contact:"",                  type:"Clinique"},
+];
+
+// ── Stock (quantités actuelles par produit) ────────────────────────────────────
+let stock = {};
+produits.forEach(p => { stock[p.id] = 0; });
+
+// ── Mouvements de stock ────────────────────────────────────────────────────────
+// type: "entree" (depuis TPCI) | "sortie" (vers partenaire)
+let mouvements = [];
+
+// ── Bons de commande ────────────────────────────────────────────────────────────
+let bonsCommande = [];
+let bcNumero = 1;
+
+// ── Vues stock ────────────────────────────────────────────────────────────────
+let stockView = "inventaire"; // inventaire | entrees | sorties | partenaires | bon-commande
+
+// ── MODULE VENTES ─────────────────────────────────────────────────────────────
+// vente: {id, date, commercialId, clientNom, clientType, lignes:[{produitId, quantite, prixVente, remise}], statut, observation}
+let ventes = [];
+let venteView = "saisie"; // saisie | historique | analyse
+// Rôles autorisés à voir l'analyse
+const ROLES_ANALYSE = ["Directeur Général","Responsable RH","Chef de Projet","Manager","Directeur","Responsable"];
+let venteEnCours = {
+  clientNom:"", clientType:"Structure partenaire", partenaireId:"",
+  lignes: [], observation:""
+};
+
+let bcLignes = [];
+
+// ── MODULE PLANS D'ACTION ─────────────────────────────────────────────────────
+// plan: {id, titre, type, objectif, responsableId, dateDebut, dateFin, statut, priorite, description, actions:[{id,titre,responsableId,dateEcheance,statut,mises_a_jour:[{date,auteurId,contenu,statut}]}]}
+let plans = [];
+let planView = "liste";  // liste | kanban
+let planFiltreType = "tous";  // tous | marketing | commercial
+
+
 let docFilter = "all"; // "all" | empId
 let docCatFilter = "Tous";
 let docSearch = "";
@@ -337,6 +394,9 @@ const NAV = [
   {key:"tasks",icon:"✓",label:"Tâches"},
   {key:"directory",icon:"◉",label:"Annuaire"},
   {key:"docs",icon:"📁",label:"Documents"},
+  {key:"stock",icon:"📦",label:"Stocks"},
+  {key:"ventes",icon:"💰",label:"Ventes"},
+  {key:"plans",icon:"🎯",label:"Plans d'action"},
 ];
 
 function renderNav(){
@@ -1257,6 +1317,9 @@ function renderMain(){
     case "chat": m.innerHTML=renderChat(); break;
     case "tasks": m.innerHTML=renderTasks(); break;
     case "directory": m.innerHTML=renderDirectory(); break;
+    case "stock": m.innerHTML=renderStock(); break;
+    case "ventes": m.innerHTML=renderVentes(); break;
+    case "plans":  m.innerHTML=renderPlans();  break;
     case "docs":    m.innerHTML=renderDocs(); break;
     case "admin": if(isAdmin()) m.innerHTML=renderAdmin(); break;
   }
@@ -1300,7 +1363,7 @@ async function ghSave(){
   if(!ghToken){ showSyncStatus("offline"); return; }
   showSyncStatus("saving");
   try {
-    const payload = JSON.stringify({ employees, tasks, groups, messages, groupMessages, documents }, null, 2);
+    const payload = JSON.stringify({ employees, tasks, groups, messages, groupMessages, documents, produits, partenaires, stock, mouvements, bonsCommande, bcNumero, ventes, plans }, null, 2);
     // btoa with unicode support
     const content = btoa(unescape(encodeURIComponent(payload)));
     const body = { message:`NBO sync ${new Date().toLocaleString("fr-FR")}`, content, branch:GH_BRANCH };
@@ -1342,6 +1405,14 @@ async function ghLoad(){
     if(raw.messages)                              messages      = raw.messages;
     if(raw.groupMessages)                         groupMessages = raw.groupMessages;
     if(raw.documents  && raw.documents.length)   documents     = raw.documents;
+    if(raw.produits   && raw.produits.length)    produits      = raw.produits;
+    if(raw.partenaires && raw.partenaires.length) partenaires  = raw.partenaires;
+    if(raw.stock)                                 stock         = raw.stock;
+    if(raw.mouvements && raw.mouvements.length)  mouvements    = raw.mouvements;
+    if(raw.bonsCommande && raw.bonsCommande.length) bonsCommande = raw.bonsCommande;
+    if(raw.bcNumero)                              bcNumero      = raw.bcNumero;
+    if(raw.ventes     && raw.ventes.length)       ventes        = raw.ventes;
+    if(raw.plans      && raw.plans.length)        plans         = raw.plans;
     console.log("✓ Données chargées depuis GitHub:", { employees:employees.length, tasks:tasks.length });
     return true;
   } catch(e){
@@ -1499,6 +1570,1487 @@ renderLoginDemoAccounts();
 })();
 
 
+// ── MODULE GESTION DES STOCKS ────────────────────────────────────────────────
+
+// ── RENDER STOCK ──────────────────────────────────────────────────────────────
+function renderStock(){
+  const tabs = [
+    {key:"inventaire",    icon:"📊", label:"Inventaire"},
+    {key:"entrees",       icon:"⬇",  label:"Entrées (TPCI)"},
+    {key:"sorties",       icon:"⬆",  label:"Sorties"},
+    {key:"bon-commande",  icon:"📋", label:"Bon de commande"},
+    {key:"partenaires",   icon:"🏥", label:"Partenaires"},
+  ];
+
+  return `<div style="padding:24px 28px;max-width:1100px">
+    <div style="margin-bottom:24px">
+      <h2 style="font-size:22px;font-weight:800;color:#fff;margin-bottom:4px">📦 Gestion des Stocks</h2>
+      <div style="font-size:13px;color:#7abf82">Fournisseur : <strong style="color:#e2bc50">TPCI</strong> · ${produits.length} produits · ${mouvements.filter(m=>m.type==="entree").length} entrées · ${mouvements.filter(m=>m.type==="sortie").length} sorties</div>
+    </div>
+
+    <!-- Onglets -->
+    <div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap">
+      ${tabs.map(t=>`<button onclick="setStockView('${t.key}')" style="padding:8px 16px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid ${stockView===t.key?"#e2bc50":"#2d6633"};background:${stockView===t.key?"#2a1e00":"#0e3516"};color:${stockView===t.key?"#e2bc50":"#7abf82"}">${t.icon} ${t.label}</button>`).join("")}
+    </div>
+
+    ${stockView==="inventaire" ? renderInventaire() : ""}
+    ${stockView==="entrees"    ? renderEntrees()    : ""}
+    ${stockView==="sorties"    ? renderSorties()    : ""}
+    ${stockView==="bon-commande" ? renderBonCommande() : ""}
+    ${stockView==="partenaires"  ? renderPartenaires() : ""}
+  </div>`;
+}
+
+// ── INVENTAIRE ────────────────────────────────────────────────────────────────
+function renderInventaire(){
+  const cats = [...new Set(produits.map(p=>p.categorie))];
+  const totalValeur = produits.reduce((sum,p)=>sum+(stock[p.id]||0)*p.prixUnitaire,0);
+
+  return `
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px">
+    <div class="statcard" style="flex-direction:row;align-items:center;gap:14px">
+      <div style="font-size:26px">📦</div>
+      <div><div style="font-size:22px;font-weight:800;color:#e2bc50">${produits.reduce((s,p)=>s+(stock[p.id]||0),0)}</div><div style="font-size:12px;color:#7abf82">Pièces en stock</div></div>
+    </div>
+    <div class="statcard" style="flex-direction:row;align-items:center;gap:14px">
+      <div style="font-size:26px">⬇</div>
+      <div><div style="font-size:22px;font-weight:800;color:#6dda50">${mouvements.filter(m=>m.type==="entree").reduce((s,m)=>s+m.quantite,0)}</div><div style="font-size:12px;color:#7abf82">Pièces reçues (TPCI)</div></div>
+    </div>
+    <div class="statcard" style="flex-direction:row;align-items:center;gap:14px">
+      <div style="font-size:26px">⬆</div>
+      <div><div style="font-size:22px;font-weight:800;color:#f59e0b">${mouvements.filter(m=>m.type==="sortie").reduce((s,m)=>s+m.quantite,0)}</div><div style="font-size:12px;color:#7abf82">Pièces distribuées</div></div>
+    </div>
+  </div>
+
+  ${cats.map(cat=>`
+  <div class="card" style="margin-bottom:16px">
+    <div style="font-size:13px;font-weight:700;color:#e2bc50;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #2d6633">${cat}</div>
+    <div style="display:grid;grid-template-columns:1fr 110px 110px 110px 140px;gap:8px;margin-bottom:8px">
+      ${["Produit","Cond.","Stock actuel","Prix unit.","Valeur stock"].map(h=>`<div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase">${h}</div>`).join("")}
+    </div>
+    ${produits.filter(p=>p.categorie===cat).map(p=>{
+      const qty = stock[p.id]||0;
+      const valeur = qty*p.prixUnitaire;
+      const alert = qty===0?"#ef4444":qty<p.conditionnement?"#f59e0b":"#6dda50";
+      return `<div style="display:grid;grid-template-columns:1fr 110px 110px 110px 140px;gap:8px;padding:10px 0;border-bottom:1px solid #0e3516;align-items:center">
+        <div>
+          <div style="font-size:13px;color:#f0ead8;font-weight:500">${p.nom}</div>
+          <div style="font-size:11px;color:#475569">${p.ref}</div>
+        </div>
+        <div style="font-size:12px;color:#7abf82">${p.conditionnement} pcs</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="width:8px;height:8px;border-radius:50%;background:${alert};flex-shrink:0"></div>
+          <span style="font-size:14px;font-weight:700;color:${alert}">${qty}</span>
+        </div>
+        <div style="font-size:12px;color:#7abf82">${p.prixUnitaire.toLocaleString("fr-FR")} FCFA</div>
+        <div style="font-size:13px;font-weight:600;color:#e2bc50">${valeur.toLocaleString("fr-FR")} FCFA</div>
+      </div>`;
+    }).join("")}
+  </div>`).join("")}
+
+  <div style="text-align:right;font-size:16px;font-weight:800;color:#e2bc50;margin-top:8px">
+    Valeur totale du stock : ${totalValeur.toLocaleString("fr-FR")} FCFA
+  </div>`;
+}
+
+// ── ENTRÉES (TPCI) ────────────────────────────────────────────────────────────
+function renderEntrees(){
+  const entrees = mouvements.filter(m=>m.type==="entree");
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+    <div style="font-size:15px;font-weight:700;color:#fff">Entrées de stock — Fournisseur TPCI</div>
+    <button class="btn" onclick="openEntreeForm()">+ Nouvelle entrée</button>
+  </div>
+  <div class="card">
+    <div style="display:grid;grid-template-columns:120px 1fr 100px 100px 1fr 120px;gap:8px;padding:10px 0;border-bottom:1px solid #2d6633;margin-bottom:8px">
+      ${["Date","Produit","Qté (pcs)","Cartons","Référence BC","Saisi par"].map(h=>`<div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase">${h}</div>`).join("")}
+    </div>
+    ${entrees.length===0?`<div style="text-align:center;padding:40px;color:#334155">Aucune entrée enregistrée</div>`:""}
+    ${entrees.map(m=>{
+      const prod = produits.find(p=>p.id===m.produitId);
+      const user = employees.find(e=>e.id===m.userId);
+      const cartons = prod ? Math.floor(m.quantite/prod.conditionnement) : 0;
+      return `<div style="display:grid;grid-template-columns:120px 1fr 100px 100px 1fr 120px;gap:8px;padding:12px 0;border-bottom:1px solid #0e3516;align-items:center">
+        <div style="font-size:12px;color:#7abf82">${m.date}</div>
+        <div>
+          <div style="font-size:13px;color:#f0ead8;font-weight:500">${prod?.nom||"?"}</div>
+          <div style="font-size:11px;color:#475569">${prod?.ref||""}</div>
+        </div>
+        <div style="font-size:14px;font-weight:700;color:#6dda50">${m.quantite}</div>
+        <div style="font-size:12px;color:#7abf82">${cartons} ctn</div>
+        <div style="font-size:12px;color:#7abf82">${m.reference||"—"}</div>
+        <div style="font-size:12px;color:#7abf82">${user?.name?.split(" ")[0]||"?"}</div>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+// ── SORTIES ───────────────────────────────────────────────────────────────────
+function renderSorties(){
+  const sorties = mouvements.filter(m=>m.type==="sortie");
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+    <div style="font-size:15px;font-weight:700;color:#fff">Sorties de stock — Structures partenaires</div>
+    <button class="btn" onclick="openSortieForm()">+ Nouvelle sortie</button>
+  </div>
+  <div class="card">
+    <div style="display:grid;grid-template-columns:120px 1fr 100px 1fr 130px;gap:8px;padding:10px 0;border-bottom:1px solid #2d6633;margin-bottom:8px">
+      ${["Date","Produit","Qté (pcs)","Structure","Saisi par"].map(h=>`<div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase">${h}</div>`).join("")}
+    </div>
+    ${sorties.length===0?`<div style="text-align:center;padding:40px;color:#334155">Aucune sortie enregistrée</div>`:""}
+    ${sorties.map(m=>{
+      const prod = produits.find(p=>p.id===m.produitId);
+      const str  = partenaires.find(s=>s.id===m.partenaireId);
+      const user = employees.find(e=>e.id===m.userId);
+      return `<div style="display:grid;grid-template-columns:120px 1fr 100px 1fr 130px;gap:8px;padding:12px 0;border-bottom:1px solid #0e3516;align-items:center">
+        <div style="font-size:12px;color:#7abf82">${m.date}</div>
+        <div>
+          <div style="font-size:13px;color:#f0ead8;font-weight:500">${prod?.nom||"?"}</div>
+          <div style="font-size:11px;color:#475569">${prod?.ref||""}</div>
+        </div>
+        <div style="font-size:14px;font-weight:700;color:#f59e0b">${m.quantite}</div>
+        <div>
+          <div style="font-size:13px;color:#f0ead8">${str?.nom||"?"}</div>
+          <div style="font-size:11px;color:#475569">${str?.ville||""}</div>
+        </div>
+        <div style="font-size:12px;color:#7abf82">${user?.name?.split(" ")[0]||"?"}</div>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+// ── BON DE COMMANDE ────────────────────────────────────────────────────────────
+function renderBonCommande(){
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+    <div style="font-size:15px;font-weight:700;color:#fff">Bons de commande vers TPCI</div>
+    <button class="btn" onclick="openBonCommandeForm()">+ Nouveau bon de commande</button>
+  </div>
+  ${bonsCommande.length===0?`<div class="card" style="text-align:center;padding:40px;color:#334155">Aucun bon de commande créé</div>`:""}
+  ${bonsCommande.map(bc=>{
+    const total = bc.lignes.reduce((s,l)=>s+l.prixTotal,0);
+    return `<div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div>
+          <div style="font-size:16px;font-weight:800;color:#e2bc50">BON DE COMMANDE N°${String(bc.numero).padStart(3,"0")}</div>
+          <div style="font-size:12px;color:#7abf82">Abidjan, le ${bc.date} · Fournisseur : TPCI</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <span style="font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;background:${bc.statut==="validé"?"#0e3010":"#2a1e00"};color:${bc.statut==="validé"?"#6dda50":"#e2bc50"};border:1px solid ${bc.statut==="validé"?"#6dda5044":"#e2bc5044"}">${bc.statut||"brouillon"}</span>
+          ${bc.statut!=="validé"?`<button onclick="validerBC('${bc.id}')" style="background:#0e3516;border:1px solid #2d6633;border-radius:7px;padding:4px 12px;color:#7abf82;font-size:12px;cursor:pointer">✓ Valider</button>`:""}
+          <button onclick="imprimerBC('${bc.id}')" style="background:#2a1e00;border:1px solid #e2bc5044;border-radius:7px;padding:4px 12px;color:#e2bc50;font-size:12px;cursor:pointer">🖨 Imprimer</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 100px 120px 110px 120px;gap:8px;padding:8px 0;border-bottom:1px solid #2d6633;border-top:1px solid #2d6633;margin-bottom:8px">
+        ${["DÉSIGNATION","COND.","QTÉ (PIÈCES)","PRIX UNIT.","PRIX TOTAL"].map(h=>`<div style="font-size:11px;font-weight:700;color:#475569">${h}</div>`).join("")}
+      </div>
+      ${bc.lignes.map(l=>{
+        const prod=produits.find(p=>p.id===l.produitId);
+        return `<div style="display:grid;grid-template-columns:1fr 100px 120px 110px 120px;gap:8px;padding:10px 0;border-bottom:1px solid #051f0a;align-items:center">
+          <div style="font-size:13px;color:#f0ead8">${prod?.nom||"?"}</div>
+          <div style="font-size:12px;color:#7abf82">${prod?.conditionnement||""}</div>
+          <div style="font-size:13px;font-weight:600;color:#fff">${l.quantite}</div>
+          <div style="font-size:12px;color:#7abf82">${l.prixUnitaire.toLocaleString("fr-FR")}</div>
+          <div style="font-size:13px;font-weight:600;color:#e2bc50">${l.prixTotal.toLocaleString("fr-FR")}</div>
+        </div>`;
+      }).join("")}
+      <div style="text-align:right;margin-top:12px;font-size:15px;font-weight:800;color:#ef4444">MONTANT TOTAL FCFA : ${total.toLocaleString("fr-FR")}</div>
+    </div>`;
+  }).join("")}`;
+}
+
+// ── PARTENAIRES ───────────────────────────────────────────────────────────────
+function renderPartenaires(){
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+    <div style="font-size:15px;font-weight:700;color:#fff">Structures partenaires</div>
+    <button class="btn" onclick="openPartenaireForm()">+ Ajouter un partenaire</button>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+    ${partenaires.map(s=>{
+      const sortiesTotales = mouvements.filter(m=>m.type==="sortie"&&m.partenaireId===s.id).reduce((sum,m)=>sum+m.quantite,0);
+      return `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div style="font-size:28px">🏥</div>
+          ${isAdmin()?`<button onclick="deletePartenaire('${s.id}')" style="background:none;border:none;color:#4a6a4e;cursor:pointer;font-size:14px" title="Supprimer">🗑</button>`:""}
+        </div>
+        <div style="font-size:15px;font-weight:700;color:#f0ead8;margin-bottom:4px">${s.nom}</div>
+        <div style="font-size:12px;color:#7abf82;margin-bottom:2px">${s.type} · ${s.ville}</div>
+        ${s.contact?`<div style="font-size:11px;color:#475569;margin-bottom:10px">${s.contact}</div>`:""}
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #2d6633;display:flex;justify-content:space-between">
+          <span style="font-size:11px;color:#475569">Total reçu</span>
+          <span style="font-size:13px;font-weight:700;color:#f59e0b">${sortiesTotales} pcs</span>
+        </div>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+// ── FORMULAIRES ───────────────────────────────────────────────────────────────
+function setStockView(v){ stockView=v; renderMain(); }
+
+function openEntreeForm(){
+  const m=document.getElementById("modal-emp");
+  m.style.display="flex";
+  m.innerHTML=`<div class="modal" style="width:520px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:800;color:#fff">⬇ Entrée de stock — TPCI</div>
+      <button onclick="document.getElementById('modal-emp').style.display='none'" style="background:none;border:none;color:#7abf82;font-size:22px;cursor:pointer">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Produit *</label>
+        <select class="inp" id="en-produit">
+          <option value="">-- Sélectionner --</option>
+          ${produits.map(p=>`<option value="${p.id}">${p.nom}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Quantité (pièces) *</label>
+        <input class="inp" type="number" id="en-qte" min="1" placeholder="Ex: 210" oninput="calcCartons()">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Cartons (calculé)</label>
+        <input class="inp" type="text" id="en-cartons" readonly style="color:#e2bc50;background:#051f0a">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Date de réception</label>
+        <input class="inp" type="date" id="en-date" value="${new Date().toISOString().slice(0,10)}">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Référence bon de livraison</label>
+        <input class="inp" id="en-ref" placeholder="Ex: BL-2026-001">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Observation</label>
+        <input class="inp" id="en-obs" placeholder="Notes éventuelles...">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn2" onclick="document.getElementById('modal-emp').style.display='none'">Annuler</button>
+      <button class="btn" onclick="saveEntree()">Enregistrer l'entrée</button>
+    </div>
+  </div>`;
+}
+
+function calcCartons(){
+  const prodId=document.getElementById("en-produit")?.value;
+  const qte=parseInt(document.getElementById("en-qte")?.value)||0;
+  const prod=produits.find(p=>p.id===prodId);
+  const c=document.getElementById("en-cartons");
+  if(c&&prod) c.value=prod.conditionnement?Math.floor(qte/prod.conditionnement)+" carton(s)":"—";
+}
+
+function saveEntree(){
+  const prodId=document.getElementById("en-produit")?.value;
+  const qte=parseInt(document.getElementById("en-qte")?.value)||0;
+  const date=document.getElementById("en-date")?.value||new Date().toISOString().slice(0,10);
+  const ref=document.getElementById("en-ref")?.value.trim()||"";
+  const obs=document.getElementById("en-obs")?.value.trim()||"";
+  if(!prodId||qte<=0){alert("Veuillez sélectionner un produit et saisir une quantité.");return;}
+  // Mettre à jour le stock
+  stock[prodId]=(stock[prodId]||0)+qte;
+  mouvements.push({id:"mv"+Date.now(),type:"entree",produitId:prodId,quantite:qte,date,reference:ref,observation:obs,userId:sessionUser?.id,createdAt:new Date().toISOString()});
+  scheduleSave();
+  document.getElementById("modal-emp").style.display="none";
+  stockView="inventaire";
+  renderMain();
+}
+
+function openSortieForm(){
+  const m=document.getElementById("modal-emp");
+  m.style.display="flex";
+  m.innerHTML=`<div class="modal" style="width:520px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:800;color:#fff">⬆ Sortie de stock — Structure partenaire</div>
+      <button onclick="document.getElementById('modal-emp').style.display='none'" style="background:none;border:none;color:#7abf82;font-size:22px;cursor:pointer">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Structure partenaire *</label>
+        <select class="inp" id="so-partenaire">
+          <option value="">-- Sélectionner --</option>
+          ${partenaires.map(s=>`<option value="${s.id}">${s.nom} (${s.ville})</option>`).join("")}
+        </select>
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Produit *</label>
+        <select class="inp" id="so-produit" oninput="showStockDispo()">
+          <option value="">-- Sélectionner --</option>
+          ${produits.map(p=>`<option value="${p.id}">${p.nom} (stock: ${stock[p.id]||0} pcs)</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Quantité (pièces) *</label>
+        <input class="inp" type="number" id="so-qte" min="1" placeholder="Quantité">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Stock disponible</label>
+        <input class="inp" type="text" id="so-dispo" readonly style="color:#e2bc50;background:#051f0a" placeholder="Sélectionnez un produit">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Date de sortie</label>
+        <input class="inp" type="date" id="so-date" value="${new Date().toISOString().slice(0,10)}">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Référence bon livraison</label>
+        <input class="inp" id="so-ref" placeholder="Ex: BL-STR-001">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Observation</label>
+        <input class="inp" id="so-obs" placeholder="Notes éventuelles...">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn2" onclick="document.getElementById('modal-emp').style.display='none'">Annuler</button>
+      <button class="btn" onclick="saveSortie()">Enregistrer la sortie</button>
+    </div>
+  </div>`;
+}
+
+function showStockDispo(){
+  const prodId=document.getElementById("so-produit")?.value;
+  const d=document.getElementById("so-dispo");
+  if(d&&prodId) d.value=(stock[prodId]||0)+" pièces disponibles";
+}
+
+function saveSortie(){
+  const partId=document.getElementById("so-partenaire")?.value;
+  const prodId=document.getElementById("so-produit")?.value;
+  const qte=parseInt(document.getElementById("so-qte")?.value)||0;
+  const date=document.getElementById("so-date")?.value||new Date().toISOString().slice(0,10);
+  const ref=document.getElementById("so-ref")?.value.trim()||"";
+  const obs=document.getElementById("so-obs")?.value.trim()||"";
+  if(!partId||!prodId||qte<=0){alert("Veuillez remplir tous les champs obligatoires.");return;}
+  if((stock[prodId]||0)<qte){alert(`Stock insuffisant ! Disponible : ${stock[prodId]||0} pièces.`);return;}
+  stock[prodId]-=qte;
+  mouvements.push({id:"mv"+Date.now(),type:"sortie",produitId:prodId,partenaireId:partId,quantite:qte,date,reference:ref,observation:obs,userId:sessionUser?.id,createdAt:new Date().toISOString()});
+  scheduleSave();
+  document.getElementById("modal-emp").style.display="none";
+  stockView="inventaire";
+  renderMain();
+}
+
+// ── BON DE COMMANDE FORM ──────────────────────────────────────────────────────
+
+function openBonCommandeForm(){
+  bcLignes = produits.map(p=>({produitId:p.id, quantite:0}));
+  renderBCForm();
+}
+
+function renderBCForm(){
+  const m=document.getElementById("modal-emp");
+  m.style.display="flex";
+  const total=bcLignes.reduce((s,l)=>{const p=produits.find(x=>x.id===l.produitId);return s+(l.quantite*(p?.prixUnitaire||0));},0);
+  m.innerHTML=`<div class="modal" style="width:700px;max-width:95vw">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div>
+        <div style="font-size:16px;font-weight:800;color:#fff">📋 Nouveau Bon de Commande — TPCI</div>
+        <div style="font-size:12px;color:#7abf82">Abidjan, le ${new Date().toLocaleDateString("fr-FR")}</div>
+      </div>
+      <button onclick="document.getElementById('modal-emp').style.display='none'" style="background:none;border:none;color:#7abf82;font-size:22px;cursor:pointer">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 90px 110px 100px 120px;gap:8px;padding:8px 0;border-bottom:1px solid #2d6633;border-top:1px solid #2d6633;margin-bottom:8px">
+      ${["DÉSIGNATION","COND.","QTÉ PIÈCES","PRIX UNIT.","PRIX TOTAL"].map(h=>`<div style="font-size:10px;font-weight:700;color:#475569">${h}</div>`).join("")}
+    </div>
+    <div style="max-height:380px;overflow-y:auto">
+    ${produits.map((p,i)=>{
+      const ligne=bcLignes[i];
+      const total=ligne.quantite*p.prixUnitaire;
+      return `<div style="display:grid;grid-template-columns:1fr 90px 110px 100px 120px;gap:8px;padding:8px 0;border-bottom:1px solid #051f0a;align-items:center">
+        <div style="font-size:12px;color:#f0ead8">${p.nom}</div>
+        <div style="font-size:11px;color:#7abf82">${p.conditionnement}</div>
+        <input type="number" min="0" value="${ligne.quantite}" oninput="updateBCLigne('${p.id}',this.value)" class="inp" style="padding:6px 8px;font-size:13px;text-align:center">
+        <div style="font-size:11px;color:#7abf82">${p.prixUnitaire.toLocaleString("fr-FR")}</div>
+        <div style="font-size:12px;font-weight:600;color:${total>0?"#e2bc50":"#334155"}">${total>0?total.toLocaleString("fr-FR"):"—"}</div>
+      </div>`;
+    }).join("")}
+    </div>
+    <div style="text-align:right;font-size:15px;font-weight:800;color:#ef4444;margin-top:12px;padding-top:12px;border-top:1px solid #2d6633">
+      MONTANT TOTAL FCFA : ${total.toLocaleString("fr-FR")}
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+      <button class="btn2" onclick="document.getElementById('modal-emp').style.display='none'">Annuler</button>
+      <button class="btn" onclick="saveBonCommande()">Créer le bon de commande</button>
+    </div>
+  </div>`;
+}
+
+function updateBCLigne(prodId, val){
+  const qte=parseInt(val)||0;
+  const idx=bcLignes.findIndex(l=>l.produitId===prodId);
+  if(idx>=0) bcLignes[idx].quantite=qte;
+  // Update total display
+  const total=bcLignes.reduce((s,l)=>{const p=produits.find(x=>x.id===l.produitId);return s+(l.quantite*(p?.prixUnitaire||0));},0);
+  const totalEl=document.querySelector('.modal [style*="MONTANT TOTAL"]');
+  if(totalEl) totalEl.textContent="MONTANT TOTAL FCFA : "+total.toLocaleString("fr-FR");
+}
+
+function saveBonCommande(){
+  const lignes=bcLignes.filter(l=>l.quantite>0).map(l=>{
+    const p=produits.find(x=>x.id===l.produitId);
+    return {...l, prixUnitaire:p?.prixUnitaire||0, prixTotal:l.quantite*(p?.prixUnitaire||0)};
+  });
+  if(lignes.length===0){alert("Veuillez saisir au moins une quantité.");return;}
+  bonsCommande.push({
+    id:"bc"+Date.now(),
+    numero:bcNumero++,
+    date:new Date().toLocaleDateString("fr-FR"),
+    lignes,
+    statut:"brouillon",
+    createdBy:sessionUser?.id,
+    createdAt:new Date().toISOString()
+  });
+  scheduleSave();
+  document.getElementById("modal-emp").style.display="none";
+  stockView="bon-commande";
+  renderMain();
+}
+
+function validerBC(bcId){
+  bonsCommande=bonsCommande.map(bc=>bc.id===bcId?{...bc,statut:"validé"}:bc);
+  scheduleSave();
+  renderMain();
+}
+
+function imprimerBC(bcId){
+  const bc=bonsCommande.find(b=>b.id===bcId);
+  if(!bc) return;
+  const total=bc.lignes.reduce((s,l)=>s+l.prixTotal,0);
+  const w=window.open("","_blank");
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BC N°${String(bc.numero).padStart(3,"0")}</title>
+  <style>body{font-family:'Arial',sans-serif;padding:40px;color:#000}h2{text-align:center;color:#c00}table{width:100%;border-collapse:collapse;margin-top:20px}th{background:#f5f5f5;font-size:12px;padding:8px;border:1px solid #ccc;text-align:left}td{padding:8px;border:1px solid #ccc;font-size:12px}.total{font-weight:bold;color:#c00;font-size:14px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}</style>
+  </head><body>
+  <div class="header"><div><strong>NBO GROUP</strong><br>Distribution & Excellence<br>Abidjan</div><div style="text-align:right"><strong>Abidjan, le ${bc.date}</strong></div></div>
+  <h2>BON DE COMMANDE N°${String(bc.numero).padStart(3,"0")}</h2>
+  <p><strong>Fournisseur :</strong> TPCI</p>
+  <table><tr><th>DÉSIGNATION</th><th>CONDITIONNEMENT</th><th>QTÉ COMMANDÉE (Pièces)</th><th>PRIX UNITAIRE (FCFA)</th><th>PRIX TOTAL (FCFA)</th></tr>
+  ${bc.lignes.map(l=>{const p=produits.find(x=>x.id===l.produitId);return`<tr><td>${p?.nom||""}</td><td>${p?.conditionnement||""}</td><td>${l.quantite}</td><td>${l.prixUnitaire.toLocaleString("fr-FR")}</td><td>${l.prixTotal.toLocaleString("fr-FR")}</td></tr>`;}).join("")}
+  <tr><td colspan="4" style="text-align:right;font-weight:bold">MONTANT TOTAL FCFA</td><td class="total">${total.toLocaleString("fr-FR")}</td></tr>
+  </table>
+  <br><br><div style="display:flex;justify-content:space-between;margin-top:40px"><div>Signature émetteur</div><div>Cachet & Signature TPCI</div></div>
+  </body></html>`);
+  w.document.close();
+  w.print();
+}
+
+// ── PARTENAIRES CRUD ──────────────────────────────────────────────────────────
+function openPartenaireForm(){
+  const m=document.getElementById("modal-emp");
+  m.style.display="flex";
+  m.innerHTML=`<div class="modal" style="width:460px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:800;color:#fff">🏥 Ajouter un partenaire</div>
+      <button onclick="document.getElementById('modal-emp').style.display='none'" style="background:none;border:none;color:#7abf82;font-size:22px;cursor:pointer">×</button>
+    </div>
+    <div style="display:grid;gap:12px">
+      <div><label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Nom de la structure *</label><input class="inp" id="pt-nom" placeholder="Ex: Pharmacie Centrale"></div>
+      <div><label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Type</label>
+        <select class="inp" id="pt-type"><option>Pharmacie</option><option>Clinique</option><option>Hôpital</option><option>Distributeur</option><option>Autre</option></select>
+      </div>
+      <div><label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Ville</label><input class="inp" id="pt-ville" placeholder="Ex: Abidjan"></div>
+      <div><label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Contact</label><input class="inp" id="pt-contact" placeholder="Téléphone ou email"></div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn2" onclick="document.getElementById('modal-emp').style.display='none'">Annuler</button>
+      <button class="btn" onclick="savePartenaire()">Ajouter</button>
+    </div>
+  </div>`;
+}
+
+function savePartenaire(){
+  const nom=(document.getElementById("pt-nom")?.value||"").trim();
+  if(!nom){alert("Le nom est obligatoire.");return;}
+  partenaires.push({id:"str"+Date.now(),nom,type:document.getElementById("pt-type")?.value||"Autre",ville:document.getElementById("pt-ville")?.value.trim()||"",contact:document.getElementById("pt-contact")?.value.trim()||""});
+  scheduleSave();
+  document.getElementById("modal-emp").style.display="none";
+  renderMain();
+}
+
+function deletePartenaire(id){
+  if(!confirm("Supprimer ce partenaire ?")) return;
+  partenaires=partenaires.filter(p=>p.id!==id);
+  scheduleSave();
+  renderMain();
+}
+
+// ── MODULE VENTES & ANALYSE ───────────────────────────────────────────────────
+
+function canAnalyse(){
+  if(!sessionUser) return false;
+  if(sessionUser.admin) return true;
+  return ROLES_ANALYSE.some(r => sessionUser.role && sessionUser.role.toLowerCase().includes(r.toLowerCase()));
+}
+
+function isCommercial(){
+  if(!sessionUser) return false;
+  return true; // tous les utilisateurs peuvent saisir des ventes
+}
+
+// ── RENDER VENTES ─────────────────────────────────────────────────────────────
+function renderVentes(){
+  const tabs = [
+    {key:"saisie",    icon:"➕", label:"Saisir une vente"},
+    {key:"historique",icon:"📋", label:"Historique"},
+  ];
+  if(canAnalyse()) tabs.push({key:"analyse", icon:"📈", label:"Analyse & Marges"});
+
+  return `<div style="padding:24px 28px;max-width:1100px">
+    <div style="margin-bottom:24px">
+      <h2 style="font-size:22px;font-weight:800;color:#fff;margin-bottom:4px">💰 Ventes</h2>
+      <div style="font-size:13px;color:#7abf82">${ventes.length} vente${ventes.length>1?"s":""} enregistrée${ventes.length>1?"s":""} · CA total : <strong style="color:#e2bc50">${ventes.reduce((s,v)=>s+calcTotalVente(v),0).toLocaleString("fr-FR")} FCFA</strong></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap">
+      ${tabs.map(t=>`<button onclick="setVenteView('${t.key}')" style="padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid ${venteView===t.key?"#e2bc50":"#2d6633"};background:${venteView===t.key?"#2a1e00":"#0e3516"};color:${venteView===t.key?"#e2bc50":"#7abf82"}">${t.icon} ${t.label}</button>`).join("")}
+    </div>
+    ${venteView==="saisie"     ? renderSaisieVente()  : ""}
+    ${venteView==="historique" ? renderHistoVentes()  : ""}
+    ${venteView==="analyse"    ? renderAnalyse()      : ""}
+  </div>`;
+}
+
+function calcTotalVente(v){
+  return (v.lignes||[]).reduce((s,l)=>{
+    const remise = l.remise||0;
+    return s + l.quantite * l.prixVente * (1 - remise/100);
+  },0);
+}
+
+function calcMargeLigne(l){
+  const prod = produits.find(p=>p.id===l.produitId);
+  const prixAchat = prod?.prixUnitaire||0;
+  const prixVenteNet = l.prixVente * (1-(l.remise||0)/100);
+  const ca = l.quantite * prixVenteNet;
+  const cout = l.quantite * prixAchat;
+  const marge = ca - cout;
+  const tauxMarge = cout>0 ? (marge/cout)*100 : 0;
+  return {ca, cout, marge, tauxMarge};
+}
+
+// ── SAISIE VENTE ──────────────────────────────────────────────────────────────
+function renderSaisieVente(){
+  const total = venteEnCours.lignes.reduce((s,l)=>{
+    const remise=l.remise||0;
+    return s+l.quantite*l.prixVente*(1-remise/100);
+  },0);
+  const totalAchat = venteEnCours.lignes.reduce((s,l)=>{
+    const prod=produits.find(p=>p.id===l.produitId);
+    return s+l.quantite*(prod?.prixUnitaire||0);
+  },0);
+  const marge = total - totalAchat;
+
+  return `<div style="display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start">
+
+    <!-- Colonne gauche : produits -->
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;color:#e2bc50;margin-bottom:14px;text-transform:uppercase;letter-spacing:.06em">Produits à vendre</div>
+        <div style="display:grid;grid-template-columns:1fr 80px 110px 80px 100px;gap:8px;padding:8px 0;border-bottom:1px solid #2d6633;margin-bottom:8px">
+          ${["Produit","Stock","Prix vente","Remise %","Action"].map(h=>`<div style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase">${h}</div>`).join("")}
+        </div>
+        ${produits.map(p=>{
+          const dispo = stock[p.id]||0;
+          const inCart = venteEnCours.lignes.find(l=>l.produitId===p.id);
+          return `<div style="display:grid;grid-template-columns:1fr 80px 110px 80px 100px;gap:8px;padding:10px 0;border-bottom:1px solid #051f0a;align-items:center">
+            <div>
+              <div style="font-size:12px;color:#f0ead8;font-weight:500">${p.nom}</div>
+              <div style="font-size:10px;color:#475569">${p.ref} · Achat: ${p.prixUnitaire.toLocaleString("fr-FR")} FCFA</div>
+            </div>
+            <div style="font-size:12px;color:${dispo===0?"#ef4444":dispo<10?"#f59e0b":"#6dda50"};font-weight:600">${dispo} pcs</div>
+            <input type="number" min="${p.prixUnitaire}" value="${inCart?inCart.prixVente:p.prixUnitaire}" id="pv-${p.id}" class="inp" style="padding:5px 8px;font-size:12px" placeholder="Prix">
+            <input type="number" min="0" max="100" value="${inCart?inCart.remise||0:0}" id="rm-${p.id}" class="inp" style="padding:5px 8px;font-size:12px" placeholder="0">
+            <button onclick="ajouterLigne('${p.id}')" style="background:${inCart?"#0e3010":"#0e3516"};border:1px solid ${inCart?"#6dda50":"#2d6633"};border-radius:7px;padding:5px 10px;color:${inCart?"#6dda50":"#7abf82"};font-size:12px;cursor:pointer;width:100%">${inCart?"✓ Ajouté":"+ Ajouter"}</button>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>
+
+    <!-- Colonne droite : récap commande -->
+    <div style="position:sticky;top:20px">
+      <div class="card" style="margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;color:#e2bc50;margin-bottom:14px;text-transform:uppercase;letter-spacing:.06em">Récapitulatif</div>
+
+        <!-- Client -->
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Type de client</label>
+          <select class="inp" id="vc-type" onchange="updateVenteClient()" style="margin-bottom:8px">
+            <option value="Structure partenaire">Structure partenaire</option>
+            <option value="Client direct">Client direct</option>
+          </select>
+        </div>
+        <div style="margin-bottom:12px" id="vc-part-div">
+          <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Structure partenaire</label>
+          <select class="inp" id="vc-partenaire">
+            <option value="">-- Sélectionner --</option>
+            ${partenaires.map(s=>`<option value="${s.id}" ${venteEnCours.partenaireId===s.id?"selected":""}>${s.nom}</option>`).join("")}
+          </select>
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Nom du client</label>
+          <input class="inp" id="vc-client" placeholder="Nom client ou structure" value="${venteEnCours.clientNom}">
+        </div>
+
+        <!-- Lignes panier -->
+        ${venteEnCours.lignes.length===0
+          ? `<div style="text-align:center;padding:20px;color:#334155;font-size:13px">Aucun produit ajouté</div>`
+          : `<div style="border-top:1px solid #2d6633;padding-top:12px;margin-bottom:12px">
+              ${venteEnCours.lignes.map(l=>{
+                const prod=produits.find(p=>p.id===l.produitId);
+                const net=l.prixVente*(1-(l.remise||0)/100)*l.quantite;
+                return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #051f0a">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:12px;color:#f0ead8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${prod?.nom||"?"}</div>
+                    <div style="font-size:10px;color:#475569">${l.quantite} × ${l.prixVente.toLocaleString("fr-FR")}${l.remise?` -${l.remise}%`:""}</div>
+                  </div>
+                  <div style="font-size:12px;font-weight:600;color:#e2bc50;white-space:nowrap">${net.toLocaleString("fr-FR")}</div>
+                  <button onclick="retirerLigne('${l.produitId}')" style="background:none;border:none;color:#4a6a4e;cursor:pointer;font-size:16px;line-height:1">×</button>
+                </div>`;
+              }).join("")}
+            </div>`
+        }
+
+        <!-- Totaux -->
+        <div style="border-top:1px solid #2d6633;padding-top:12px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:12px;color:#7abf82">Coût d'achat</span>
+            <span style="font-size:12px;color:#7abf82">${totalAchat.toLocaleString("fr-FR")} FCFA</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:13px;font-weight:700;color:#fff">Total vente HT</span>
+            <span style="font-size:13px;font-weight:700;color:#e2bc50">${total.toLocaleString("fr-FR")} FCFA</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:8px;border-radius:8px;background:${marge>=0?"#0e3010":"#2e0e0e"};margin-bottom:14px">
+            <span style="font-size:13px;font-weight:700;color:${marge>=0?"#6dda50":"#ef4444"}">Marge brute</span>
+            <span style="font-size:13px;font-weight:800;color:${marge>=0?"#6dda50":"#ef4444"}">${marge.toLocaleString("fr-FR")} FCFA</span>
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Observation</label>
+            <input class="inp" id="vc-obs" placeholder="Notes..." value="${venteEnCours.observation}">
+          </div>
+          <button class="btn" onclick="enregistrerVente()" style="width:100%;padding:12px;font-size:14px" ${venteEnCours.lignes.length===0?"disabled style='opacity:.5'":""}>
+            ✓ Enregistrer la vente
+          </button>
+          ${venteEnCours.lignes.length>0?`<button class="btn2" onclick="viderPanier()" style="width:100%;margin-top:8px;padding:10px;font-size:13px">Vider le panier</button>`:""}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function setVenteView(v){ venteView=v; renderMain(); }
+
+function ajouterLigne(prodId){
+  const pvEl = document.getElementById("pv-"+prodId);
+  const rmEl = document.getElementById("rm-"+prodId);
+  const prixVente = parseFloat(pvEl?.value)||0;
+  const remise = parseFloat(rmEl?.value)||0;
+  const prod = produits.find(p=>p.id===prodId);
+  if(!prod) return;
+  if(prixVente < prod.prixUnitaire){
+    if(!confirm("Prix de vente inférieur au coût d'achat. Continuer ?")) return;
+  }
+  const existing = venteEnCours.lignes.findIndex(l=>l.produitId===prodId);
+  if(existing>=0){
+    venteEnCours.lignes[existing].prixVente = prixVente;
+    venteEnCours.lignes[existing].remise = remise;
+  } else {
+    venteEnCours.lignes.push({produitId:prodId, quantite:1, prixVente, remise});
+  }
+  renderMain();
+}
+
+function retirerLigne(prodId){
+  venteEnCours.lignes = venteEnCours.lignes.filter(l=>l.produitId!==prodId);
+  renderMain();
+}
+
+function viderPanier(){
+  venteEnCours.lignes = [];
+  renderMain();
+}
+
+function updateVenteClient(){
+  const type = document.getElementById("vc-type")?.value;
+  const div = document.getElementById("vc-part-div");
+  if(div) div.style.display = type==="Structure partenaire"?"block":"none";
+}
+
+function enregistrerVente(){
+  const clientNom = (document.getElementById("vc-client")?.value||"").trim();
+  const clientType = document.getElementById("vc-type")?.value||"Client direct";
+  const partenaireId = document.getElementById("vc-partenaire")?.value||"";
+  const observation = document.getElementById("vc-obs")?.value||"";
+  if(venteEnCours.lignes.length===0){ alert("Ajoutez au moins un produit."); return; }
+  if(!clientNom && !partenaireId){ alert("Indiquez le nom du client ou sélectionnez une structure."); return; }
+
+  // Vérifier les stocks
+  for(const l of venteEnCours.lignes){
+    if((stock[l.produitId]||0) < l.quantite){
+      const prod = produits.find(p=>p.id===l.produitId);
+      alert("Stock insuffisant pour " + (prod?.nom||"ce produit") + " (dispo: " + (stock[l.produitId]||0) + " pcs)");
+      return;
+    }
+  }
+
+  // Déduire du stock
+  venteEnCours.lignes.forEach(l => { stock[l.produitId] = (stock[l.produitId]||0) - l.quantite; });
+
+  // Créer la vente
+  const vente = {
+    id: "v"+Date.now(),
+    date: new Date().toISOString().slice(0,10),
+    dateAffichage: new Date().toLocaleDateString("fr-FR"),
+    commercialId: sessionUser?.id,
+    clientNom: clientNom || partenaires.find(p=>p.id===partenaireId)?.nom || "Client",
+    clientType,
+    partenaireId,
+    lignes: [...venteEnCours.lignes],
+    observation,
+    statut: "validée",
+    createdAt: new Date().toISOString(),
+  };
+  ventes.push(vente);
+  // Réinitialiser le panier
+  venteEnCours = {clientNom:"", clientType:"Structure partenaire", partenaireId:"", lignes:[], observation:""};
+  scheduleSave();
+  venteView = "historique";
+  renderMain();
+}
+
+// ── HISTORIQUE VENTES ─────────────────────────────────────────────────────────
+function renderHistoVentes(){
+  const today = new Date().toISOString().slice(0,10);
+  const caJour = ventes.filter(v=>v.date===today).reduce((s,v)=>s+calcTotalVente(v),0);
+  const caMois = ventes.filter(v=>v.date?.slice(0,7)===today.slice(0,7)).reduce((s,v)=>s+calcTotalVente(v),0);
+  const caTotal = ventes.reduce((s,v)=>s+calcTotalVente(v),0);
+
+  return `
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px">
+    <div class="statcard" style="flex-direction:row;align-items:center;gap:14px">
+      <div style="font-size:26px">📅</div>
+      <div><div style="font-size:20px;font-weight:800;color:#e2bc50">${caJour.toLocaleString("fr-FR")}</div><div style="font-size:12px;color:#7abf82">CA aujourd'hui (FCFA)</div></div>
+    </div>
+    <div class="statcard" style="flex-direction:row;align-items:center;gap:14px">
+      <div style="font-size:26px">📆</div>
+      <div><div style="font-size:20px;font-weight:800;color:#6dda50">${caMois.toLocaleString("fr-FR")}</div><div style="font-size:12px;color:#7abf82">CA ce mois (FCFA)</div></div>
+    </div>
+    <div class="statcard" style="flex-direction:row;align-items:center;gap:14px">
+      <div style="font-size:26px">💰</div>
+      <div><div style="font-size:20px;font-weight:800;color:#f59e0b">${caTotal.toLocaleString("fr-FR")}</div><div style="font-size:12px;color:#7abf82">CA total (FCFA)</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:grid;grid-template-columns:110px 1fr 1fr 120px 120px 110px;gap:8px;padding:10px 0;border-bottom:1px solid #2d6633;margin-bottom:4px">
+      ${["Date","Client","Commercial","Nbre articles","CA (FCFA)","Actions"].map(h=>`<div style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase">${h}</div>`).join("")}
+    </div>
+    ${ventes.length===0?`<div style="text-align:center;padding:40px;color:#334155">Aucune vente enregistrée</div>`:""}
+    ${[...ventes].reverse().map(v=>{
+      const comm = employees.find(e=>e.id===v.commercialId);
+      const total = calcTotalVente(v);
+      const nbArt = v.lignes.reduce((s,l)=>s+l.quantite,0);
+      return `<div style="display:grid;grid-template-columns:110px 1fr 1fr 120px 120px 110px;gap:8px;padding:12px 0;border-bottom:1px solid #051f0a;align-items:center">
+        <div style="font-size:12px;color:#7abf82">${v.dateAffichage||v.date}</div>
+        <div>
+          <div style="font-size:13px;color:#f0ead8;font-weight:500">${v.clientNom}</div>
+          <div style="font-size:11px;color:#475569">${v.clientType}</div>
+        </div>
+        <div style="font-size:12px;color:#7abf82">${comm?.name||"?"}</div>
+        <div style="font-size:13px;font-weight:600;color:#fff">${nbArt} pcs</div>
+        <div style="font-size:13px;font-weight:700;color:#e2bc50">${total.toLocaleString("fr-FR")}</div>
+        <div style="display:flex;gap:5px">
+          <button onclick="voirDetailVente('${v.id}')" style="background:#0e3516;border:1px solid #2d6633;border-radius:6px;padding:4px 8px;color:#7abf82;font-size:11px;cursor:pointer">👁 Détail</button>
+        </div>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+function voirDetailVente(vid){
+  const v = ventes.find(x=>x.id===vid);
+  if(!v) return;
+  const comm = employees.find(e=>e.id===v.commercialId);
+  const total = calcTotalVente(v);
+  const totalAchat = v.lignes.reduce((s,l)=>{const p=produits.find(x=>x.id===l.produitId);return s+l.quantite*(p?.prixUnitaire||0);},0);
+  const marge = total - totalAchat;
+  const m = document.getElementById("modal-emp");
+  m.style.display="flex";
+  m.innerHTML=`<div class="modal" style="width:580px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div><div style="font-size:16px;font-weight:800;color:#fff">Détail de la vente</div>
+        <div style="font-size:12px;color:#7abf82">${v.dateAffichage||v.date} · ${comm?.name||"?"}</div>
+      </div>
+      <button onclick="document.getElementById('modal-emp').style.display='none'" style="background:none;border:none;color:#7abf82;font-size:22px;cursor:pointer">×</button>
+    </div>
+    <div style="background:#051f0a;border:1px solid #2d6633;border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:#f0ead8">${v.clientNom}</div>
+      <div style="font-size:11px;color:#7abf82">${v.clientType}</div>
+      ${v.observation?`<div style="font-size:11px;color:#475569;margin-top:4px">${v.observation}</div>`:""}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 70px 90px 70px 100px;gap:8px;padding:8px 0;border-bottom:1px solid #2d6633;margin-bottom:6px">
+      ${["Produit","Qté","Prix vente","Remise","Total"].map(h=>`<div style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase">${h}</div>`).join("")}
+    </div>
+    ${v.lignes.map(l=>{
+      const p=produits.find(x=>x.id===l.produitId);
+      const net=l.prixVente*(1-(l.remise||0)/100)*l.quantite;
+      const m=calcMargeLigne(l);
+      return `<div style="display:grid;grid-template-columns:1fr 70px 90px 70px 100px;gap:8px;padding:10px 0;border-bottom:1px solid #051f0a;align-items:center">
+        <div><div style="font-size:12px;color:#f0ead8">${p?.nom||"?"}</div>
+          <div style="font-size:10px;color:#475569">Achat: ${(p?.prixUnitaire||0).toLocaleString("fr-FR")} · Marge: <span style="color:${m.marge>=0?"#6dda50":"#ef4444"}">${m.marge.toLocaleString("fr-FR")}</span></div>
+        </div>
+        <div style="font-size:12px;color:#fff">${l.quantite}</div>
+        <div style="font-size:12px;color:#e2bc50">${l.prixVente.toLocaleString("fr-FR")}</div>
+        <div style="font-size:12px;color:#7abf82">${l.remise||0}%</div>
+        <div style="font-size:12px;font-weight:600;color:#e2bc50">${net.toLocaleString("fr-FR")}</div>
+      </div>`;
+    }).join("")}
+    <div style="border-top:1px solid #2d6633;padding-top:12px;margin-top:8px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="color:#7abf82">Coût d'achat total</span><span style="color:#7abf82">${totalAchat.toLocaleString("fr-FR")} FCFA</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="font-weight:700;color:#fff">CA total</span><span style="font-weight:700;color:#e2bc50">${total.toLocaleString("fr-FR")} FCFA</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px;border-radius:8px;background:${marge>=0?"#0e3010":"#2e0e0e"}">
+        <span style="font-weight:800;color:${marge>=0?"#6dda50":"#ef4444"}">Marge brute</span>
+        <span style="font-weight:800;color:${marge>=0?"#6dda50":"#ef4444"}">${marge.toLocaleString("fr-FR")} FCFA (${totalAchat>0?((marge/totalAchat)*100).toFixed(1):0}%)</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── ANALYSE & MARGES ─────────────────────────────────────────────────────────
+function renderAnalyse(){
+  if(!canAnalyse()) return `<div class="card" style="text-align:center;padding:40px;color:#ef4444">⛔ Accès réservé aux responsables et managers.</div>`;
+
+  // Calculs globaux
+  const caTotal = ventes.reduce((s,v)=>s+calcTotalVente(v),0);
+  const coutTotal = ventes.reduce((s,v)=>s+v.lignes.reduce((ss,l)=>{const p=produits.find(x=>x.id===l.produitId);return ss+l.quantite*(p?.prixUnitaire||0);},0),0);
+  const margeTotal = caTotal - coutTotal;
+  const tauxMarge = coutTotal>0?((margeTotal/coutTotal)*100).toFixed(1):0;
+  const tauxMargeCA = caTotal>0?((margeTotal/caTotal)*100).toFixed(1):0;
+
+  // Par produit
+  const parProduit = produits.map(p=>{
+    const lignesProd = ventes.flatMap(v=>v.lignes.filter(l=>l.produitId===p.id));
+    const qte = lignesProd.reduce((s,l)=>s+l.quantite,0);
+    const ca = lignesProd.reduce((s,l)=>s+l.quantite*l.prixVente*(1-(l.remise||0)/100),0);
+    const cout = qte * p.prixUnitaire;
+    const marge = ca - cout;
+    const taux = cout>0?((marge/cout)*100).toFixed(1):0;
+    return {...p, qte, ca, cout, marge, taux};
+  }).filter(p=>p.qte>0).sort((a,b)=>b.marge-a.marge);
+
+  // Par commercial
+  const parCommercial = employees.map(e=>{
+    const ventesComm = ventes.filter(v=>v.commercialId===e.id);
+    const ca = ventesComm.reduce((s,v)=>s+calcTotalVente(v),0);
+    const cout = ventesComm.reduce((s,v)=>s+v.lignes.reduce((ss,l)=>{const p=produits.find(x=>x.id===l.produitId);return ss+l.quantite*(p?.prixUnitaire||0);},0),0);
+    const marge = ca - cout;
+    const nb = ventesComm.length;
+    return {...e, ca, cout, marge, nb};
+  }).filter(e=>e.nb>0).sort((a,b)=>b.ca-a.ca);
+
+  // Par catégorie
+  const cats = [...new Set(produits.map(p=>p.categorie))];
+  const parCategorie = cats.map(cat=>{
+    const prodsCat = produits.filter(p=>p.categorie===cat);
+    const lignes = ventes.flatMap(v=>v.lignes.filter(l=>prodsCat.find(p=>p.id===l.produitId)));
+    const ca = lignes.reduce((s,l)=>s+l.quantite*l.prixVente*(1-(l.remise||0)/100),0);
+    const cout = lignes.reduce((s,l)=>{const p=produits.find(x=>x.id===l.produitId);return s+l.quantite*(p?.prixUnitaire||0);},0);
+    const marge = ca - cout;
+    const taux = cout>0?((marge/cout)*100).toFixed(1):0;
+    return {cat, ca, cout, marge, taux};
+  }).filter(c=>c.ca>0);
+
+  const barMax = Math.max(...parProduit.map(p=>Math.abs(p.marge)),1);
+
+  return `
+  <!-- KPI Globaux -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px">
+    ${[
+      {label:"Chiffre d'affaires",  val:caTotal.toLocaleString("fr-FR")+" FCFA",  icon:"💰", color:"#e2bc50"},
+      {label:"Coût d'achats",       val:coutTotal.toLocaleString("fr-FR")+" FCFA", icon:"🏭", color:"#7abf82"},
+      {label:"Marge brute",         val:margeTotal.toLocaleString("fr-FR")+" FCFA",icon:"📈", color:margeTotal>=0?"#6dda50":"#ef4444"},
+      {label:"Taux de marge / CA",  val:tauxMargeCA+"%",                           icon:"📊", color:tauxMargeCA>30?"#6dda50":tauxMargeCA>15?"#f59e0b":"#ef4444"},
+    ].map(k=>`<div class="statcard">
+      <div style="font-size:24px;margin-bottom:6px">${k.icon}</div>
+      <div style="font-size:18px;font-weight:800;color:${k.color}">${k.val}</div>
+      <div style="font-size:12px;color:#7abf82">${k.label}</div>
+    </div>`).join("")}
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+
+    <!-- Marge par catégorie -->
+    <div class="card">
+      <div style="font-size:13px;font-weight:700;color:#e2bc50;margin-bottom:16px;text-transform:uppercase;letter-spacing:.06em">📦 Marge par gamme</div>
+      ${parCategorie.length===0?`<div style="text-align:center;padding:20px;color:#334155">Aucune donnée</div>`:""}
+      ${parCategorie.map(c=>`
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:13px;font-weight:600;color:#f0ead8">${c.cat}</span>
+            <span style="font-size:13px;font-weight:700;color:${c.marge>=0?"#6dda50":"#ef4444"}">${c.marge.toLocaleString("fr-FR")} FCFA</span>
+          </div>
+          <div style="background:#051f0a;border-radius:4px;height:8px;overflow:hidden">
+            <div style="height:100%;border-radius:4px;background:${c.marge>=0?"linear-gradient(90deg,#1a5c1a,#6dda50)":"#ef4444"};width:${caTotal>0?Math.min(100,(c.ca/caTotal*100)).toFixed(0):0}%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:3px">
+            <span style="font-size:10px;color:#475569">CA: ${c.ca.toLocaleString("fr-FR")}</span>
+            <span style="font-size:10px;color:${parseFloat(c.taux)>0?"#6dda50":"#ef4444"}">${c.taux}% de marge</span>
+          </div>
+        </div>`).join("")}
+    </div>
+
+    <!-- Performance commerciaux -->
+    <div class="card">
+      <div style="font-size:13px;font-weight:700;color:#e2bc50;margin-bottom:16px;text-transform:uppercase;letter-spacing:.06em">👥 Performance commerciaux</div>
+      ${parCommercial.length===0?`<div style="text-align:center;padding:20px;color:#334155">Aucune donnée</div>`:""}
+      ${parCommercial.map((e,i)=>`
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #051f0a">
+          <div style="width:28px;height:28px;border-radius:50%;background:${e.color};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0">${e.avatar}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;color:#f0ead8;font-weight:600">${e.name}</div>
+            <div style="font-size:11px;color:#475569">${e.nb} vente${e.nb>1?"s":""}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:13px;font-weight:700;color:#e2bc50">${e.ca.toLocaleString("fr-FR")}</div>
+            <div style="font-size:11px;color:${e.marge>=0?"#6dda50":"#ef4444"}">Marge: ${e.marge.toLocaleString("fr-FR")}</div>
+          </div>
+        </div>`).join("")}
+    </div>
+  </div>
+
+  <!-- Marge par produit -->
+  <div class="card">
+    <div style="font-size:13px;font-weight:700;color:#e2bc50;margin-bottom:16px;text-transform:uppercase;letter-spacing:.06em">📊 Analyse marge par produit</div>
+    ${parProduit.length===0?`<div style="text-align:center;padding:30px;color:#334155">Aucune vente enregistrée</div>`:`
+    <div style="display:grid;grid-template-columns:1fr 80px 120px 120px 120px 100px 160px;gap:8px;padding:8px 0;border-bottom:1px solid #2d6633;margin-bottom:6px">
+      ${["Produit","Qté","CA","Coût achat","Marge brute","Taux %","Visualisation"].map(h=>`<div style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase">${h}</div>`).join("")}
+    </div>
+    ${parProduit.map(p=>`
+      <div style="display:grid;grid-template-columns:1fr 80px 120px 120px 120px 100px 160px;gap:8px;padding:12px 0;border-bottom:1px solid #051f0a;align-items:center">
+        <div>
+          <div style="font-size:13px;color:#f0ead8;font-weight:500">${p.nom}</div>
+          <div style="font-size:10px;color:#475569">${p.ref}</div>
+        </div>
+        <div style="font-size:13px;font-weight:600;color:#fff">${p.qte}</div>
+        <div style="font-size:12px;color:#e2bc50">${p.ca.toLocaleString("fr-FR")}</div>
+        <div style="font-size:12px;color:#7abf82">${p.cout.toLocaleString("fr-FR")}</div>
+        <div style="font-size:13px;font-weight:700;color:${p.marge>=0?"#6dda50":"#ef4444"}">${p.marge.toLocaleString("fr-FR")}</div>
+        <div style="font-size:13px;font-weight:700;color:${parseFloat(p.taux)>30?"#6dda50":parseFloat(p.taux)>15?"#f59e0b":"#ef4444"}">${p.taux}%</div>
+        <div style="background:#051f0a;border-radius:4px;height:10px;overflow:hidden">
+          <div style="height:100%;border-radius:4px;background:${p.marge>=0?"linear-gradient(90deg,#1a5c1a,#6dda50)":"#ef4444"};width:${(Math.abs(p.marge)/barMax*100).toFixed(0)}%"></div>
+        </div>
+      </div>`).join("")}
+    `}
+  </div>`;
+}
+
+// ── MODULE PLANS D'ACTION MARKETING & COMMERCIAL ─────────────────────────────
+
+const PLAN_STATUTS = {
+  "en_cours":  {label:"En cours",   bg:"#1c3a10", color:"#e2bc50", dot:"#e2bc50"},
+  "termine":   {label:"Terminé",    bg:"#0e3010", color:"#6dda50", dot:"#6dda50"},
+  "en_attente":{label:"En attente", bg:"#1a2030", color:"#7abf82", dot:"#475569"},
+  "annule":    {label:"Annulé",     bg:"#2e0e0e", color:"#ff8080", dot:"#ef4444"},
+};
+const PLAN_PRIORITES = {
+  haute:  {label:"Haute",  color:"#ef4444"},
+  moyenne:{label:"Moyenne",color:"#f59e0b"},
+  basse:  {label:"Basse",  color:"#6dda50"},
+};
+const ACTION_STATUTS = ["À faire","En cours","Terminée","Bloquée"];
+
+// ── RENDER PLANS ──────────────────────────────────────────────────────────────
+function renderPlans(){
+  const filtres = [
+    {key:"tous",       label:"Tous les plans"},
+    {key:"marketing",  label:"🎨 Marketing"},
+    {key:"commercial", label:"💼 Commercial"},
+  ];
+  const plansFiltres = planFiltreType==="tous"
+    ? plans
+    : plans.filter(p=>p.type===planFiltreType);
+
+  const enCours   = plansFiltres.filter(p=>p.statut==="en_cours").length;
+  const termines  = plansFiltres.filter(p=>p.statut==="termine").length;
+  const enAttente = plansFiltres.filter(p=>p.statut==="en_attente").length;
+  const actionsTotal = plansFiltres.reduce((s,p)=>s+(p.actions?.length||0),0);
+  const actionsFaites = plansFiltres.reduce((s,p)=>s+(p.actions||[]).filter(a=>a.statut==="Terminée").length,0);
+
+  return `<div style="padding:24px 28px;max-width:1100px">
+
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+      <div>
+        <h2 style="font-size:22px;font-weight:800;color:#fff;margin-bottom:4px">🎯 Plans d'action Marketing & Commercial</h2>
+        <div style="font-size:13px;color:#7abf82">${plans.length} plan${plans.length>1?"s":""} · ${actionsTotal} actions · <span style="color:#6dda50">${actionsFaites} terminées</span></div>
+      </div>
+      <button class="btn" onclick="openPlanForm()">+ Nouveau plan</button>
+    </div>
+
+    <!-- Filtres type -->
+    <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+      ${filtres.map(f=>`<button onclick="setPlanFiltre('${f.key}')" style="padding:7px 16px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid ${planFiltreType===f.key?"#e2bc50":"#2d6633"};background:${planFiltreType===f.key?"#2a1e00":"#0e3516"};color:${planFiltreType===f.key?"#e2bc50":"#7abf82"}">${f.label}</button>`).join("")}
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <button onclick="setPlanView('liste')" style="padding:7px 14px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid ${planView==="liste"?"#e2bc50":"#2d6633"};background:${planView==="liste"?"#2a1e00":"#0e3516"};color:${planView==="liste"?"#e2bc50":"#7abf82"}">☰ Liste</button>
+        <button onclick="setPlanView('kanban')" style="padding:7px 14px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid ${planView==="kanban"?"#e2bc50":"#2d6633"};background:${planView==="kanban"?"#2a1e00":"#0e3516"};color:${planView==="kanban"?"#e2bc50":"#7abf82"}">⊞ Kanban</button>
+      </div>
+    </div>
+
+    <!-- KPI -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
+      ${[
+        {icon:"🔄",val:enCours,  label:"En cours",   color:"#e2bc50"},
+        {icon:"✅",val:termines, label:"Terminés",    color:"#6dda50"},
+        {icon:"⏳",val:enAttente,label:"En attente",  color:"#7abf82"},
+        {icon:"📋",val:actionsTotal>0?Math.round(actionsFaites/actionsTotal*100)+"%":"0%",label:"Avancement actions",color:"#f59e0b"},
+      ].map(k=>`<div class="statcard" style="flex-direction:row;align-items:center;gap:12px">
+        <div style="font-size:22px">${k.icon}</div>
+        <div><div style="font-size:20px;font-weight:800;color:${k.color}">${k.val}</div><div style="font-size:11px;color:#7abf82">${k.label}</div></div>
+      </div>`).join("")}
+    </div>
+
+    ${planView==="kanban" ? renderPlansKanban(plansFiltres) : renderPlansList(plansFiltres)}
+  </div>`;
+}
+
+// ── VUE LISTE ─────────────────────────────────────────────────────────────────
+function renderPlansList(plansFiltres){
+  if(plansFiltres.length===0) return `<div class="card" style="text-align:center;padding:48px;color:#334155">
+    <div style="font-size:40px;margin-bottom:12px">🎯</div>
+    <div style="font-size:15px;color:#7abf82">Aucun plan d'action créé</div>
+    <div style="font-size:13px;color:#334155;margin-top:4px">Cliquez sur "+ Nouveau plan" pour commencer</div>
+  </div>`;
+
+  return plansFiltres.map(plan=>{
+    const resp = employees.find(e=>e.id===plan.responsableId);
+    const st = PLAN_STATUTS[plan.statut] || PLAN_STATUTS["en_attente"];
+    const pr = PLAN_PRIORITES[plan.priorite] || PLAN_PRIORITES["moyenne"];
+    const actions = plan.actions||[];
+    const done = actions.filter(a=>a.statut==="Terminée").length;
+    const progress = actions.length>0 ? Math.round(done/actions.length*100) : 0;
+    const daysLeft = plan.dateFin ? Math.ceil((new Date(plan.dateFin)-new Date())/(1000*60*60*24)) : null;
+
+    return `<div class="card" style="margin-bottom:16px;border-left:4px solid ${plan.type==="marketing"?"#a855f7":"#22c55e"}">
+      <!-- En-tête plan -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;background:${plan.type==="marketing"?"#2a1040":"#0a3020"};color:${plan.type==="marketing"?"#a855f7":"#22c55e"}">${plan.type==="marketing"?"🎨 Marketing":"💼 Commercial"}</span>
+            <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;background:${st.bg};color:${st.color}">${st.label}</span>
+            <span style="font-size:11px;font-weight:700;color:${pr.color}">● ${pr.label} priorité</span>
+            ${daysLeft!==null?`<span style="font-size:11px;color:${daysLeft<0?"#ef4444":daysLeft<7?"#f59e0b":"#475569"}">${daysLeft<0?"⚠ Dépassé de "+Math.abs(daysLeft)+"j":daysLeft===0?"Échéance aujourd'hui":"Échéance dans "+daysLeft+"j"}</span>`:""}
+          </div>
+          <div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:4px">${plan.titre}</div>
+          <div style="font-size:13px;color:#7abf82;margin-bottom:6px">${plan.objectif||""}</div>
+          ${plan.description?`<div style="font-size:12px;color:#475569">${plan.description}</div>`:""}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button onclick="ouvrirPlan('${plan.id}')" style="background:#0e3516;border:1px solid #2d6633;border-radius:7px;padding:6px 12px;color:#7abf82;font-size:12px;cursor:pointer">👁 Voir</button>
+          ${isAdmin()||sessionUser?.id===plan.responsableId?`<button onclick="openPlanForm('${plan.id}')" style="background:#2a1e00;border:1px solid #e2bc5044;border-radius:7px;padding:6px 12px;color:#e2bc50;font-size:12px;cursor:pointer">✏ Modifier</button>`:""}
+          ${isAdmin()?`<button onclick="deletePlan('${plan.id}')" style="background:#2e0e0e;border:1px solid #7a2000;border-radius:7px;padding:6px 12px;color:#ff8080;font-size:12px;cursor:pointer">🗑</button>`:""}
+        </div>
+      </div>
+
+      <!-- Infos & Progress -->
+      <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        ${resp?`<div style="display:flex;align-items:center;gap:6px">
+          <div style="width:24px;height:24px;border-radius:50%;background:${resp.color};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">${resp.avatar}</div>
+          <span style="font-size:12px;color:#7abf82">${resp.name}</span>
+        </div>`:""}
+        ${plan.dateDebut?`<span style="font-size:12px;color:#475569">📅 ${plan.dateDebut} → ${plan.dateFin||"?"}</span>`:""}
+        <span style="font-size:12px;color:#475569">${actions.length} action${actions.length>1?"s":""} · ${done} terminée${done>1?"s":""}</span>
+      </div>
+
+      <!-- Barre de progression -->
+      ${actions.length>0?`<div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:11px;color:#475569">Progression</span>
+          <span style="font-size:11px;font-weight:700;color:${progress===100?"#6dda50":"#e2bc50"}">${progress}%</span>
+        </div>
+        <div style="background:#051f0a;border-radius:6px;height:8px;overflow:hidden">
+          <div style="height:100%;border-radius:6px;background:${progress===100?"linear-gradient(90deg,#1a5c1a,#6dda50)":"linear-gradient(90deg,#1a3c10,#e2bc50)"};width:${progress}%;transition:width .3s"></div>
+        </div>
+      </div>`:""}
+
+      <!-- Aperçu actions -->
+      ${actions.length>0?`<div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${actions.slice(0,5).map(a=>`<span style="font-size:11px;padding:3px 8px;border-radius:10px;background:${a.statut==="Terminée"?"#0e3010":a.statut==="En cours"?"#1c3a10":a.statut==="Bloquée"?"#2e0e0e":"#0e1a20"};color:${a.statut==="Terminée"?"#6dda50":a.statut==="En cours"?"#e2bc50":a.statut==="Bloquée"?"#ff8080":"#475569"}">${a.statut==="Terminée"?"✓":a.statut==="En cours"?"▶":a.statut==="Bloquée"?"⛔":"○"} ${a.titre}</span>`).join("")}
+        ${actions.length>5?`<span style="font-size:11px;color:#475569;padding:3px 8px">+${actions.length-5} autres</span>`:""}
+      </div>`:""}
+    </div>`;
+  }).join("");
+}
+
+// ── VUE KANBAN ────────────────────────────────────────────────────────────────
+function renderPlansKanban(plansFiltres){
+  const colonnes = [
+    {key:"en_attente", label:"En attente", color:"#475569"},
+    {key:"en_cours",   label:"En cours",   color:"#e2bc50"},
+    {key:"termine",    label:"Terminés",   color:"#6dda50"},
+    {key:"annule",     label:"Annulés",    color:"#ef4444"},
+  ];
+  return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;align-items:start">
+    ${colonnes.map(col=>{
+      const colPlans = plansFiltres.filter(p=>p.statut===col.key);
+      return `<div style="background:#051f0a;border-radius:14px;padding:14px;border-top:3px solid ${col.color}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span style="font-size:13px;font-weight:700;color:${col.color}">${col.label}</span>
+          <span style="background:#0e3516;color:#7abf82;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px">${colPlans.length}</span>
+        </div>
+        ${colPlans.length===0?`<div style="text-align:center;padding:20px 0;color:#334155;font-size:12px">Aucun plan</div>`:""}
+        ${colPlans.map(plan=>{
+          const resp=employees.find(e=>e.id===plan.responsableId);
+          const actions=plan.actions||[];
+          const done=actions.filter(a=>a.statut==="Terminée").length;
+          const prog=actions.length>0?Math.round(done/actions.length*100):0;
+          return `<div onclick="ouvrirPlan('${plan.id}')" style="background:#0a2e10;border:1px solid #2d6633;border-radius:10px;padding:12px;margin-bottom:10px;cursor:pointer" onmouseover="this.style.borderColor='#e2bc50'" onmouseout="this.style.borderColor='#2d6633'">
+            <div style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;display:inline-block;background:${plan.type==="marketing"?"#2a1040":"#0a3020"};color:${plan.type==="marketing"?"#a855f7":"#22c55e"};margin-bottom:8px">${plan.type==="marketing"?"🎨 Mktg":"💼 Comm"}</div>
+            <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:6px">${plan.titre}</div>
+            ${resp?`<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px">
+              <div style="width:18px;height:18px;border-radius:50%;background:${resp.color};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff">${resp.avatar}</div>
+              <span style="font-size:11px;color:#7abf82">${resp.name.split(" ")[0]}</span>
+            </div>`:""}
+            ${actions.length>0?`<div>
+              <div style="background:#051f0a;border-radius:4px;height:5px;overflow:hidden;margin-bottom:4px">
+                <div style="height:100%;border-radius:4px;background:${prog===100?"#6dda50":"#e2bc50"};width:${prog}%"></div>
+              </div>
+              <div style="font-size:10px;color:#475569">${done}/${actions.length} actions</div>
+            </div>`:""}
+          </div>`;
+        }).join("")}
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+// ── MODAL DETAIL PLAN ─────────────────────────────────────────────────────────
+function ouvrirPlan(planId){
+  const plan = plans.find(p=>p.id===planId);
+  if(!plan) return;
+  const resp = employees.find(e=>e.id===plan.responsableId);
+  const st = PLAN_STATUTS[plan.statut]||PLAN_STATUTS["en_attente"];
+  const actions = plan.actions||[];
+  const done = actions.filter(a=>a.statut==="Terminée").length;
+  const prog = actions.length>0?Math.round(done/actions.length*100):0;
+
+  const m = document.getElementById("modal-emp");
+  m.style.display="flex";
+  m.innerHTML=`<div class="modal" style="width:680px;max-width:95vw">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+      <div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;background:${plan.type==="marketing"?"#2a1040":"#0a3020"};color:${plan.type==="marketing"?"#a855f7":"#22c55e"}">${plan.type==="marketing"?"🎨 Marketing":"💼 Commercial"}</span>
+          <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;background:${st.bg};color:${st.color}">${st.label}</span>
+        </div>
+        <div style="font-size:18px;font-weight:800;color:#fff;margin-bottom:4px">${plan.titre}</div>
+        <div style="font-size:13px;color:#7abf82">${plan.objectif||""}</div>
+      </div>
+      <button onclick="document.getElementById('modal-emp').style.display='none'" style="background:none;border:none;color:#7abf82;font-size:24px;cursor:pointer;flex-shrink:0">×</button>
+    </div>
+
+    ${plan.description?`<div style="background:#051f0a;border:1px solid #2d6633;border-radius:10px;padding:12px;margin-bottom:16px;font-size:13px;color:#7abf82;line-height:1.6">${plan.description}</div>`:""}
+
+    <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+      ${resp?`<div style="display:flex;align-items:center;gap:6px"><div style="width:28px;height:28px;border-radius:50%;background:${resp.color};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">${resp.avatar}</div><div><div style="font-size:12px;color:#f0ead8;font-weight:600">${resp.name}</div><div style="font-size:10px;color:#475569">Responsable</div></div></div>`:""}
+      ${plan.dateDebut?`<div><div style="font-size:10px;color:#475569;text-transform:uppercase">Période</div><div style="font-size:12px;color:#7abf82">${plan.dateDebut} → ${plan.dateFin||"?"}</div></div>`:""}
+    </div>
+
+    <!-- Progression -->
+    ${actions.length>0?`<div style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:13px;font-weight:700;color:#fff">Progression globale</span>
+        <span style="font-size:13px;font-weight:800;color:${prog===100?"#6dda50":"#e2bc50"}">${prog}%</span>
+      </div>
+      <div style="background:#051f0a;border-radius:8px;height:12px;overflow:hidden">
+        <div style="height:100%;border-radius:8px;background:${prog===100?"linear-gradient(90deg,#1a5c1a,#6dda50)":"linear-gradient(90deg,#1a3c10,#e2bc50)"};width:${prog}%"></div>
+      </div>
+    </div>`:""}
+
+    <!-- Actions -->
+    <div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div style="font-size:14px;font-weight:700;color:#e2bc50;text-transform:uppercase;letter-spacing:.06em">Actions (${actions.length})</div>
+        <button onclick="openActionForm('${planId}')" style="background:#0e3516;border:1px solid #2d6633;border-radius:7px;padding:5px 12px;color:#7abf82;font-size:12px;cursor:pointer">+ Ajouter une action</button>
+      </div>
+      ${actions.length===0?`<div style="text-align:center;padding:20px;color:#334155;font-size:13px">Aucune action définie</div>`:""}
+      ${actions.map(action=>{
+        const ar=employees.find(e=>e.id===action.responsableId);
+        const mises=action.mises_a_jour||[];
+        const lastMaj=mises[mises.length-1];
+        return `<div style="background:#051f0a;border:1px solid #2d6633;border-radius:10px;padding:14px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+            <div style="flex:1">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+                <select onchange="updateActionStatut('${planId}','${action.id}',this.value)" style="background:#0a2e10;border:1px solid #2d6633;border-radius:6px;padding:3px 8px;color:${action.statut==="Terminée"?"#6dda50":action.statut==="En cours"?"#e2bc50":action.statut==="Bloquée"?"#ef4444":"#7abf82"};font-size:11px;font-weight:700;cursor:pointer">
+                  ${ACTION_STATUTS.map(s=>`<option value="${s}" ${action.statut===s?"selected":""}>${s}</option>`).join("")}
+                </select>
+                ${ar?`<span style="font-size:11px;color:#7abf82">👤 ${ar.name.split(" ")[0]}</span>`:""}
+                ${action.dateEcheance?`<span style="font-size:11px;color:#475569">📅 ${action.dateEcheance}</span>`:""}
+              </div>
+              <div style="font-size:13px;font-weight:600;color:#f0ead8">${action.titre}</div>
+              ${lastMaj?`<div style="font-size:11px;color:#475569;margin-top:4px">Dernière MàJ: ${lastMaj.contenu?.slice(0,80)}...</div>`:""}
+            </div>
+            <div style="display:flex;gap:5px;flex-shrink:0">
+              <button onclick="openMajForm('${planId}','${action.id}')" style="background:#0e3516;border:1px solid #2d6633;border-radius:6px;padding:4px 10px;color:#7abf82;font-size:11px;cursor:pointer">📝 MàJ</button>
+              ${isAdmin()||sessionUser?.id===plan.responsableId?`<button onclick="deleteAction('${planId}','${action.id}')" style="background:none;border:none;color:#4a6a4e;cursor:pointer;font-size:14px">🗑</button>`:""}
+            </div>
+          </div>
+          ${mises.length>0?`<div style="border-top:1px solid #0e3516;padding-top:8px;margin-top:8px">
+            ${mises.slice(-3).reverse().map(maj=>{
+              const majAuteur=employees.find(e=>e.id===maj.auteurId);
+              return `<div style="display:flex;gap-8px;padding:6px 0;border-bottom:1px solid #0a1f0a">
+                <div style="flex:1">
+                  <div style="font-size:11px;color:#6aaa70;margin-bottom:2px">${maj.date} · <strong>${majAuteur?.name||"?"}</strong> · <span style="color:${maj.statut==="Terminée"?"#6dda50":maj.statut==="Bloquée"?"#ef4444":"#e2bc50"}">${maj.statut}</span></div>
+                  <div style="font-size:12px;color:#7abf82">${maj.contenu}</div>
+                </div>
+              </div>`;
+            }).join("")}
+          </div>`:""}
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
+// ── FORMULAIRE PLAN ───────────────────────────────────────────────────────────
+function openPlanForm(planId){
+  const plan = planId ? plans.find(p=>p.id===planId) : null;
+  const m = document.getElementById("modal-emp");
+  m.style.display="flex";
+  m.innerHTML=`<div class="modal" style="width:540px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:800;color:#fff">${plan?"✏ Modifier le plan":"🎯 Nouveau plan d'action"}</div>
+      <button onclick="document.getElementById('modal-emp').style.display='none'" style="background:none;border:none;color:#7abf82;font-size:22px;cursor:pointer">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Titre du plan *</label>
+        <input class="inp" id="pl-titre" placeholder="Ex: Lancement produit HERZA Q4 2026" value="${plan?.titre||""}">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Type *</label>
+        <select class="inp" id="pl-type">
+          <option value="marketing" ${(!plan||plan.type==="marketing")?"selected":""}>🎨 Marketing</option>
+          <option value="commercial" ${plan?.type==="commercial"?"selected":""}>💼 Commercial</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Priorité</label>
+        <select class="inp" id="pl-priorite">
+          <option value="haute" ${plan?.priorite==="haute"?"selected":""}>🔴 Haute</option>
+          <option value="moyenne" ${(!plan||plan.priorite==="moyenne")?"selected":""}>🟡 Moyenne</option>
+          <option value="basse" ${plan?.priorite==="basse"?"selected":""}>🟢 Basse</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Statut</label>
+        <select class="inp" id="pl-statut">
+          ${Object.entries(PLAN_STATUTS).map(([k,v])=>`<option value="${k}" ${plan?.statut===k?"selected":""}>${v.label}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Responsable</label>
+        <select class="inp" id="pl-resp">
+          <option value="">-- Sélectionner --</option>
+          ${employees.map(e=>`<option value="${e.id}" ${plan?.responsableId===e.id?"selected":""}>${e.name}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Date début</label>
+        <input class="inp" type="date" id="pl-debut" value="${plan?.dateDebut||""}">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Date fin</label>
+        <input class="inp" type="date" id="pl-fin" value="${plan?.dateFin||""}">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Objectif principal</label>
+        <input class="inp" id="pl-objectif" placeholder="Ex: Augmenter les ventes HERZA de 30% en Q4" value="${plan?.objectif||""}">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Description & contexte</label>
+        <textarea class="inp" id="pl-desc" rows="3" placeholder="Décrivez le contexte, les enjeux, la stratégie..." style="resize:vertical">${plan?.description||""}</textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn2" onclick="document.getElementById('modal-emp').style.display='none'">Annuler</button>
+      <button class="btn" onclick="savePlan('${planId||""}')">${plan?"Enregistrer les modifications":"Créer le plan"}</button>
+    </div>
+  </div>`;
+}
+
+function savePlan(planId){
+  const titre   = (document.getElementById("pl-titre")?.value||"").trim();
+  if(!titre){ alert("Le titre est obligatoire."); return; }
+  const data = {
+    titre,
+    type:          document.getElementById("pl-type")?.value||"marketing",
+    priorite:      document.getElementById("pl-priorite")?.value||"moyenne",
+    statut:        document.getElementById("pl-statut")?.value||"en_attente",
+    responsableId: parseInt(document.getElementById("pl-resp")?.value)||null,
+    dateDebut:     document.getElementById("pl-debut")?.value||"",
+    dateFin:       document.getElementById("pl-fin")?.value||"",
+    objectif:      document.getElementById("pl-objectif")?.value||"",
+    description:   document.getElementById("pl-desc")?.value||"",
+  };
+  if(planId){
+    plans = plans.map(p=>p.id===planId?{...p,...data}:p);
+  } else {
+    plans.push({id:"plan"+Date.now(), ...data, actions:[], createdBy:sessionUser?.id, createdAt:new Date().toISOString()});
+  }
+  scheduleSave();
+  document.getElementById("modal-emp").style.display="none";
+  renderMain();
+}
+
+function deletePlan(planId){
+  if(!confirm("Supprimer ce plan et toutes ses actions ?")) return;
+  plans = plans.filter(p=>p.id!==planId);
+  scheduleSave();
+  renderMain();
+}
+
+// ── FORMULAIRE ACTION ─────────────────────────────────────────────────────────
+function openActionForm(planId){
+  const m = document.getElementById("modal-emp");
+  m.style.display="flex";
+  m.innerHTML=`<div class="modal" style="width:480px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:800;color:#fff">➕ Ajouter une action</div>
+      <button onclick="ouvrirPlan('${planId}')" style="background:none;border:none;color:#7abf82;font-size:22px;cursor:pointer">×</button>
+    </div>
+    <div style="display:grid;gap:12px">
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Titre de l'action *</label>
+        <input class="inp" id="ac-titre" placeholder="Ex: Créer les visuels réseaux sociaux">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Responsable</label>
+          <select class="inp" id="ac-resp">
+            <option value="">-- Sélectionner --</option>
+            ${employees.map(e=>`<option value="${e.id}">${e.name}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Date échéance</label>
+          <input class="inp" type="date" id="ac-date">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Statut initial</label>
+        <select class="inp" id="ac-statut">
+          ${ACTION_STATUTS.map(s=>`<option value="${s}">${s}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Description</label>
+        <textarea class="inp" id="ac-desc" rows="2" placeholder="Détails de l'action..." style="resize:vertical"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn2" onclick="ouvrirPlan('${planId}')">Annuler</button>
+      <button class="btn" onclick="saveAction('${planId}')">Ajouter l'action</button>
+    </div>
+  </div>`;
+}
+
+function saveAction(planId){
+  const titre = (document.getElementById("ac-titre")?.value||"").trim();
+  if(!titre){ alert("Le titre est obligatoire."); return; }
+  const action = {
+    id: "ac"+Date.now(),
+    titre,
+    responsableId: parseInt(document.getElementById("ac-resp")?.value)||null,
+    dateEcheance:  document.getElementById("ac-date")?.value||"",
+    statut:        document.getElementById("ac-statut")?.value||"À faire",
+    description:   document.getElementById("ac-desc")?.value||"",
+    mises_a_jour:  [],
+    createdAt:     new Date().toISOString(),
+  };
+  plans = plans.map(p=>p.id===planId?{...p, actions:[...(p.actions||[]), action]}:p);
+  scheduleSave();
+  ouvrirPlan(planId);
+}
+
+function updateActionStatut(planId, actionId, statut){
+  plans = plans.map(p=>{
+    if(p.id!==planId) return p;
+    return {...p, actions:(p.actions||[]).map(a=>a.id===actionId?{...a,statut}:a)};
+  });
+  scheduleSave();
+  ouvrirPlan(planId);
+}
+
+function deleteAction(planId, actionId){
+  if(!confirm("Supprimer cette action ?")) return;
+  plans = plans.map(p=>p.id===planId?{...p,actions:(p.actions||[]).filter(a=>a.id!==actionId)}:p);
+  scheduleSave();
+  ouvrirPlan(planId);
+}
+
+// ── FORMULAIRE MISE À JOUR ────────────────────────────────────────────────────
+function openMajForm(planId, actionId){
+  const plan = plans.find(p=>p.id===planId);
+  const action = plan?.actions?.find(a=>a.id===actionId);
+  if(!action) return;
+  const m = document.getElementById("modal-emp");
+  m.style.display="flex";
+  m.innerHTML=`<div class="modal" style="width:480px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div>
+        <div style="font-size:16px;font-weight:800;color:#fff">📝 Mise à jour</div>
+        <div style="font-size:12px;color:#7abf82">${action.titre}</div>
+      </div>
+      <button onclick="ouvrirPlan('${planId}')" style="background:none;border:none;color:#7abf82;font-size:22px;cursor:pointer">×</button>
+    </div>
+    <div style="display:grid;gap:12px">
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Nouveau statut de l'action</label>
+        <select class="inp" id="maj-statut">
+          ${ACTION_STATUTS.map(s=>`<option value="${s}" ${action.statut===s?"selected":""}>${s}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:#7abf82;display:block;margin-bottom:4px;text-transform:uppercase">Contenu de la mise à jour *</label>
+        <textarea class="inp" id="maj-contenu" rows="4" placeholder="Décrivez l'avancement, les difficultés, les prochaines étapes..." style="resize:vertical"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn2" onclick="ouvrirPlan('${planId}')">Annuler</button>
+      <button class="btn" onclick="saveMaj('${planId}','${actionId}')">Enregistrer la mise à jour</button>
+    </div>
+  </div>`;
+}
+
+function saveMaj(planId, actionId){
+  const contenu = (document.getElementById("maj-contenu")?.value||"").trim();
+  if(!contenu){ alert("Le contenu est obligatoire."); return; }
+  const statut = document.getElementById("maj-statut")?.value||"En cours";
+  const maj = {
+    id:       "maj"+Date.now(),
+    date:     new Date().toLocaleDateString("fr-FR"),
+    auteurId: sessionUser?.id,
+    contenu,
+    statut,
+  };
+  plans = plans.map(p=>{
+    if(p.id!==planId) return p;
+    return {...p, actions:(p.actions||[]).map(a=>{
+      if(a.id!==actionId) return a;
+      return {...a, statut, mises_a_jour:[...(a.mises_a_jour||[]), maj]};
+    })};
+  });
+  scheduleSave();
+  ouvrirPlan(planId);
+}
+
+function setPlanView(v){ planView=v; renderMain(); }
+function setPlanFiltre(v){ planFiltreType=v; renderMain(); }
+
 // ── EXPOSE GLOBALS (for onclick handlers) ────────────────────────────────────
 window.doLogin          = doLogin;
 window.doLogout         = doLogout;
@@ -1539,7 +3091,40 @@ window.saveGhConfig     = saveGhConfig;
 window.toggleCfgToken   = toggleCfgToken;
 window.skipConfig       = skipConfig;
 window.resetGhConfig    = resetGhConfig;
-window.installPWA       = installPWA;
+window.setPlanView       = setPlanView;
+window.setPlanFiltre     = setPlanFiltre;
+window.openPlanForm      = openPlanForm;
+window.savePlan          = savePlan;
+window.deletePlan        = deletePlan;
+window.ouvrirPlan        = ouvrirPlan;
+window.openActionForm    = openActionForm;
+window.saveAction        = saveAction;
+window.updateActionStatut= updateActionStatut;
+window.deleteAction      = deleteAction;
+window.openMajForm       = openMajForm;
+window.saveMaj           = saveMaj;
+window.setVenteView      = setVenteView;
+window.ajouterLigne      = ajouterLigne;
+window.retirerLigne      = retirerLigne;
+window.viderPanier       = viderPanier;
+window.updateVenteClient = updateVenteClient;
+window.enregistrerVente  = enregistrerVente;
+window.voirDetailVente   = voirDetailVente;
+window.installPWA        = installPWA;
+window.openEntreeForm    = openEntreeForm;
+window.saveEntree        = saveEntree;
+window.calcCartons       = calcCartons;
+window.openSortieForm    = openSortieForm;
+window.saveSortie        = saveSortie;
+window.showStockDispo    = showStockDispo;
+window.openBonCommandeForm = openBonCommandeForm;
+window.updateBCLigne     = updateBCLigne;
+window.saveBonCommande   = saveBonCommande;
+window.validerBC         = validerBC;
+window.imprimerBC        = imprimerBC;
+window.openPartenaireForm= openPartenaireForm;
+window.savePartenaire    = savePartenaire;
+window.deletePartenaire  = deletePartenaire;
 
 </script>
 </body>
