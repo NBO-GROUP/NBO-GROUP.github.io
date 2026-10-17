@@ -74,10 +74,10 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.6}
 </div>
 
 <!-- CONFIG SCREEN (GitHub token setup) -->
-<div id="config-screen" style="position:fixed;inset:0;background:radial-gradient(ellipse at 50% 30%,#0f3d18 0%,#051006 100%);display:none;display:none;align-items:center;justify-content:center;z-index:3000"></div>
+<div id="config-screen" style="display:none;position:fixed;inset:0;background:radial-gradient(ellipse at 50% 30%,#0f3d18 0%,#051006 100%);align-items:center;justify-content:center;z-index:3000display:none;;display:none"></div>
 
 <!-- LOGIN SCREEN -->
-<div id="login-screen" style="position:fixed;inset:0;background:radial-gradient(ellipse at 50% 30%, #0f3d18 0%, #051006 100%);display:flex;align-items:center;justify-content:center;z-index:2000;flex-direction:column;gap:0">
+<div id="login-screen" style="position:fixed;inset:0;background:radial-gradient(ellipse at 50% 30%, #0f3d18 0%, #051006 100%);display:flex;align-items:center;justify-content:center;z-index:2000;flex-direction:column;gap:0;display:flex">
 
   <!-- Logo -->
   <div style="margin-bottom:28px;text-align:center">
@@ -1501,8 +1501,7 @@ async function saveGhConfig(){
 }
 
 function skipConfig(){
-  ghToken="";
-  localStorage.removeItem("nbo_gh_token");
+  // Ne pas effacer le token - juste aller au login
   document.getElementById("config-screen").style.display="none";
   document.getElementById("login-screen").style.display="flex";
   renderLoginDemoAccounts();
@@ -1549,7 +1548,7 @@ renderNav();
 renderMain();
 renderLoginDemoAccounts();
 
-// login-screen visible by default, hide others
+// Démarrage : toujours afficher l'écran de connexion
 document.getElementById('app').style.display='none';
 document.getElementById('config-screen').style.display='none';
 document.getElementById('login-screen').style.display='flex';
@@ -1558,12 +1557,13 @@ renderNav();
 renderMain();
 renderLoginDemoAccounts();
 
+// Chargement des données GitHub en arrière-plan (silencieux)
 (async function(){
   if(ghToken){
     ghLoad().then(ok=>{
       if(ok){ showSyncStatus("saved"); renderLoginDemoAccounts(); }
       else { showSyncStatus("error"); }
-    });
+    }).catch(()=>{ showSyncStatus("offline"); });
   } else {
     showSyncStatus("offline");
   }
