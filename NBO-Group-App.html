@@ -250,8 +250,8 @@ function doLogin(){
     );
     if(errEl){
       errEl.textContent = exists
-        ? "✗ Mot de passe incorrect."
-        : "✗ Aucun compte trouvé avec cet email.";
+        ? "✗ Mot de passe incorrect. Essayez votre mot de passe initial."
+        : "✗ Aucun compte trouvé. Vérifiez votre email ou connectez-vous avec votre nom complet.";
       errEl.style.display="block";
     }
     const pi = document.getElementById("li-pass");
@@ -1425,7 +1425,15 @@ async function ghLoad(){
     localStorage.setItem("nbo_gh_sha", ghFileSha);
     const raw = JSON.parse(decodeURIComponent(escape(atob(json.content.replace(/\n/g,"")))));
     // Restaurer les données
-    if(raw.employees  && raw.employees.length)  employees     = raw.employees;
+    if(raw.employees  && raw.employees.length){
+      employees = raw.employees;
+      // Sécurité: s'assurer que l'admin existe toujours avec son accès
+      const adminExists = employees.find(e=>e.admin && e.email==="k.benali@nbogroup.ma");
+      if(!adminExists){
+        // Restaurer l'admin si supprimé par erreur
+        employees.unshift({id:1,name:"Karim Benali",role:"Directeur Général",dept:"Direction",avatar:"KB",online:false,email:"k.benali@nbogroup.ma",phone:"",photo:null,color:"#1e40af",admin:true,password:"admin123"});
+      }
+    }
     if(raw.tasks      && raw.tasks.length)       tasks         = raw.tasks;
     if(raw.groups     && raw.groups.length)      groups        = raw.groups;
     if(raw.messages)                              messages      = raw.messages;
@@ -1440,6 +1448,10 @@ async function ghLoad(){
     if(raw.ventes     && raw.ventes.length)       ventes        = raw.ventes;
     if(raw.plans      && raw.plans.length)        plans         = raw.plans;
     console.log("✓ Données chargées depuis GitHub:", { employees:employees.length, tasks:tasks.length });
+    // Rafraîchir les comptes de démo sur l'écran de login si visible
+    if(document.getElementById("login-screen")?.style.display !== "none"){
+      renderLoginDemoAccounts();
+    }
     return true;
   } catch(e){
     console.error("ghLoad error:", e);
