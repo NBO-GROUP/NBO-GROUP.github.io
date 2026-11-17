@@ -392,6 +392,7 @@ function initials(name){ return name.trim().split(/\s+/).map(w=>w[0].toUpperCase
 function now(){ const d=new Date(); return d.getHours().toString().padStart(2,"0")+":"+d.getMinutes().toString().padStart(2,"0"); }
 
 function avatarHTML(emp, size){
+  if(!emp) return "";
   if(emp.photo){
     return `<img src="${emp.photo}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid ${emp.color}44">`;
   }
@@ -425,6 +426,7 @@ const NAV = [
 ];
 
 function renderNav(){
+  if(!me()) return;
   const nav = [...NAV];
   if(isAdmin()) nav.push({key:"admin",icon:"⚙",label:"Admin"});
   document.getElementById("nav").innerHTML = nav.map(n=>`
@@ -1334,6 +1336,7 @@ function deleteDoc(docId){
 
 
 function renderMain(){
+  if(!me()) return;
   const m=document.getElementById("main");
   m.style.display=currentView==="chat"?"flex":"block";
   m.style.flexDirection="column";
@@ -1692,21 +1695,10 @@ function renderLoginDemoAccounts(){
   }).join("");
 }
 
-// Démarrage
-document.getElementById("app").style.display = "none";
-document.getElementById("config-screen").style.display = "none";
-
-renderNav();
-renderMain();
-renderLoginDemoAccounts();
-
-// Démarrage : toujours afficher l'écran de connexion
+// Démarrage : afficher uniquement l'écran de connexion (aucun rendu avant login)
 document.getElementById('app').style.display='none';
 document.getElementById('config-screen').style.display='none';
 document.getElementById('login-screen').style.display='flex';
-
-renderNav();
-renderMain();
 renderLoginDemoAccounts();
 
 // Chargement des données GitHub en arrière-plan (silencieux)
